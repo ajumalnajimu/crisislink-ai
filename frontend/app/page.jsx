@@ -10,12 +10,34 @@ export default function LandingPage() {
           <span className="text-sm font-bold text-rose-800 ml-3 mr-4 uppercase tracking-wide">Disaster Response Active</span>
         </div>
         
-        <h1 className="text-6xl md:text-8xl font-black text-slate-900 tracking-tighter mb-8 leading-tight drop-shadow-sm">
-          Crisis<span className="bg-clip-text text-transparent bg-gradient-to-r from-rose-500 to-red-600">Link</span> <span className="text-slate-400">AI</span>
-        </h1>
-        <p className="text-xl md:text-2xl text-slate-600 mb-16 max-w-3xl mx-auto leading-relaxed font-medium">
-          Intelligent real-time coordination for disaster zones. Connecting victims with life-saving resources instantly using predictive AI routing.
-        </p>
+        <div className="mb-10 animate-in fade-in slide-in-from-top-4 duration-700">
+           <h1 className="text-3xl md:text-5xl font-black text-slate-800 tracking-tighter mb-4 drop-shadow-sm">
+             Crisis<span className="text-rose-600">Link</span> <span className="text-slate-400 font-bold">AI</span>
+           </h1>
+           <p className="text-lg text-slate-500 font-medium">Intelligent real-time disaster coordination. If you are in immediate danger, use the SOS button below.</p>
+        </div>
+
+        {/* MASSIVE SOS BUTTON */}
+        <div className="flex justify-center mb-24 relative animate-in zoom-in-75 fade-in duration-1000">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 md:w-80 md:h-80 bg-red-600 rounded-full blur-[80px] opacity-40 animate-pulse"></div>
+          
+          <Link href="/victim" className="relative group flex items-center justify-center w-64 h-64 md:w-80 md:h-80 bg-gradient-to-br from-red-500 to-red-700 rounded-full shadow-[0_20px_60px_-15px_rgba(239,68,68,0.6)] hover:shadow-[0_20px_100px_-10px_rgba(239,68,68,0.8)] transition-all duration-500 hover:scale-[1.03] border-8 border-white active:scale-95">
+            <div className="absolute inset-1 bg-gradient-to-tr from-red-800 to-rose-500 rounded-full shadow-inner opacity-80 border-4 border-red-400/30 group-hover:opacity-100 transition-opacity"></div>
+            <div className="relative z-10 flex flex-col items-center justify-center translate-y-2">
+              <span className="text-white text-[5rem] md:text-[6.5rem] font-black tracking-widest drop-shadow-[0_4px_10px_rgba(0,0,0,0.3)] mb-1 leading-none">SOS</span>
+              <span className="text-white text-xs md:text-sm font-bold uppercase tracking-[0.25em] bg-black/20 px-5 py-2 rounded-full backdrop-blur-sm border border-white/10">Request Rescue</span>
+            </div>
+            
+            {/* Ripple Effects */}
+            <div className="absolute inset-0 rounded-full border border-red-500/50 scale-100 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]"></div>
+          </Link>
+        </div>
+
+        <div className="mb-8 flex items-center justify-center gap-6 opacity-60">
+          <div className="h-px bg-slate-300 w-24"></div>
+          <p className="text-xs uppercase tracking-widest font-bold text-slate-500">Or Select Portal</p>
+          <div className="h-px bg-slate-300 w-24"></div>
+        </div>
 
         <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           {/* Victim Link */}
