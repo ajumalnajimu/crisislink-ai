@@ -18,6 +18,9 @@ export default function AuthorityPage() {
   const [activeTab, setActiveTab] = useState('explorer');
   const [geoTrigger, setGeoTrigger] = useState(0);
   const [flyToTarget, setFlyToTarget] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -123,6 +126,68 @@ export default function AuthorityPage() {
     if (!groupedCases[region]) groupedCases[region] = [];
     groupedCases[region].push(m);
   });
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#fafafa] relative overflow-hidden text-slate-800">
+        <div className="w-full max-w-[350px] bg-white border border-slate-300 flex flex-col pt-12 pb-6 px-10 relative z-10">
+          <div className="flex justify-center mb-8">
+            <h1 className="text-[2.2rem] font-black text-slate-800 tracking-tight text-center leading-[1.1]">
+              CrisisLink<br/><span className="text-emerald-500 font-sans tracking-wide font-black text-xl">COMMAND</span>
+            </h1>
+          </div>
+          
+          <form className="flex flex-col gap-1.5 mb-4" onSubmit={(e) => { e.preventDefault(); setIsAuthenticated(true); }}>
+            <div className="relative mb-2">
+              <input 
+                type="text" 
+                placeholder="Phone number, username, or email" 
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                className="w-full text-xs px-2 pt-2.5 pb-2 bg-[#fafafa] border border-slate-300 rounded-[3px] focus:outline-none focus:border-slate-400 placeholder:text-slate-500 font-regular" 
+              />
+            </div>
+            <div className="relative mb-2">
+              <input 
+                type="password" 
+                placeholder="Password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full text-xs px-2 pt-2.5 pb-2 bg-[#fafafa] border border-slate-300 rounded-[3px] focus:outline-none focus:border-slate-400 placeholder:text-slate-500 font-regular" 
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={!username || password.length < 6}
+              className="mt-3 w-full py-1.5 font-bold text-[14px] text-white bg-[#0095f6] hover:bg-[#1877f2] disabled:opacity-70 disabled:hover:bg-[#0095f6] rounded-[8px] transition-colors"
+            >
+              Log in
+            </button>
+          </form>
+
+          <div className="flex items-center gap-4 my-3 mb-6">
+            <div className="flex-1 h-px bg-slate-300"></div>
+            <span className="text-[13px] font-bold text-slate-400 uppercase">or</span>
+            <div className="flex-1 h-px bg-slate-300"></div>
+          </div>
+
+          <div className="text-center">
+            <button className="flex items-center justify-center gap-2 w-full text-[14px] font-bold text-[#385185] hover:text-[#283e6b] transition-colors mb-3">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+              Log in with Secure ID
+            </button>
+            <button className="text-xs text-[#00376b] hover:text-slate-500 transition-colors">Forgot password?</button>
+          </div>
+        </div>
+
+        <div className="w-full max-w-[350px] mt-2.5 py-5 bg-white border border-slate-300 flex flex-col items-center justify-center relative z-10 text-[14px]">
+          <p className="text-slate-800 m-0">Don't have an account? <span className="text-[#0095f6] font-bold cursor-pointer">Sign up</span></p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-transparent font-sans text-slate-100 pb-8 flex flex-col">
