@@ -26,7 +26,7 @@ SITUATION_MULTIPLIERS: dict[str, float] = {
 }
 
 # Reassignment threshold: new score must exceed current by this much
-REASSIGNMENT_THRESHOLD: float = 0.05
+REASSIGNMENT_THRESHOLD: float = 0.02
 
 
 def haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -98,7 +98,7 @@ def calculate_score(
     if victim.get("escalated"):
         effective_urgency = 10
 
-    urgency_component = (effective_urgency / 10) * 0.5
+    urgency_component = (effective_urgency / 10) * 0.7
 
     # --- Distance component ---
     distance_km = haversine(
@@ -108,7 +108,7 @@ def calculate_score(
         float(volunteer.get("lng", 0)),
     )
     distance_score = max(0.0, 1 - distance_km / 10)
-    distance_component = distance_score * 0.3
+    distance_component = distance_score * 0.2
 
     # --- Resource match component ---
     if need == "sos":
@@ -119,7 +119,7 @@ def calculate_score(
             if volunteer.get("resource", "").lower() == need
             else 0.3
         )
-    resource_component = resource_match * 0.2
+    resource_component = resource_match * 0.1
 
     # --- Total score ---
     score = round(urgency_component + distance_component + resource_component, 4)
@@ -143,9 +143,9 @@ def calculate_score(
 
     sit_info = f", situations={active_situations}, speed_mult={max_multiplier}x" if active_situations else ""
     decision_log = (
-        f"Score {score}: urgency={effective_urgency}/10 (raw={urgency_raw}, need_bonus=+{need_bonus}, vuln_boost=+{vuln_boost}, ×0.5={urgency_component:.2f}), "
-        f"dist={distance_km:.2f}km (score={distance_score:.2f}, ×0.3={distance_component:.2f}), "
-        f"resource={'MATCH' if resource_match == 1.0 else 'PARTIAL'} (×0.2={resource_component:.2f}), "
+        f"Score {score}: urgency={effective_urgency}/10 (raw={urgency_raw}, need_bonus=+{need_bonus}, vuln_boost=+{vuln_boost}, ×0.7={urgency_component:.2f}), "
+        f"dist={distance_km:.2f}km (score={distance_score:.2f}, ×0.2={distance_component:.2f}), "
+        f"resource={'MATCH' if resource_match == 1.0 else 'PARTIAL'} (×0.1={resource_component:.2f}), "
         f"ETA≈{eta_minutes}min{sit_info}"
     )
 
