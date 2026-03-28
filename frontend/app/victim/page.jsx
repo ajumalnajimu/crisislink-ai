@@ -94,13 +94,28 @@ export default function VictimPage() {
               setFireNearby(v.situation.fireNearby || false);
               setBuildingCollapse(v.situation.buildingCollapse || false);
             }
+          } else {
+            // Backend was cleared or session invalid
+            localStorage.removeItem('crisislink_victimId');
+            setVictimId(null);
+            setSubmitted(false);
           }
+        })
+        .catch(() => {
+            // Network fallback
+            localStorage.removeItem('crisislink_victimId');
+            setVictimId(null);
+            setSubmitted(false);
         })
         .finally(() => setActiveSession(false));
     } else {
       setActiveSession(false);
     }
   }, []);
+
+  // Sync myCoords to a ref for polling loop
+  const myCoordsRef = useRef(myCoords);
+  useEffect(() => { myCoordsRef.current = myCoords; }, [myCoords]);
 
   // Poll Matches & Watch GPS
   useEffect(() => {
@@ -150,10 +165,10 @@ export default function VictimPage() {
                previousVolunteerId = myMatch.volunteerId;
 
                // Compute dynamic ETA if both coordinates exist
-               let currentEtaStr = `${myMatch.eta || '?'} mins`;
-               if (myCoords && volunteer.lat) {
-                 const newEta = calcDynamicETA(myCoords.lat, myCoords.lng, volunteer.lat, volunteer.lng, { trapped, waterRising, fireNearby, buildingCollapse });
-                 currentEtaStr = `${newEta} mins`;
+               let currentEtaStr = `${myMatch.eta || '?'} min`;
+               if (myCoordsRef.current && volunteer.lat) {
+                 const newEta = calcDynamicETA(myCoordsRef.current.lat, myCoordsRef.current.lng, volunteer.lat, volunteer.lng, { trapped, waterRising, fireNearby, buildingCollapse });
+                 currentEtaStr = `${newEta} min`;
                }
 
                setMatchData({
@@ -174,7 +189,7 @@ export default function VictimPage() {
     };
 
     pollMatches();
-    const interval = setInterval(pollMatches, 3000); // Poll faster
+    const interval = setInterval(pollMatches, 5000);
     
     return () => {
       clearInterval(interval);
@@ -182,7 +197,7 @@ export default function VictimPage() {
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, [submitted, victimId, myCoords, trapped, waterRising, fireNearby, buildingCollapse]);
+  }, [submitted, victimId, trapped, waterRising, fireNearby, buildingCollapse]);
 
   const endSession = () => {
     localStorage.removeItem('crisislink_victimId');
