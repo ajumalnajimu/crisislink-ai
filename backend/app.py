@@ -135,17 +135,20 @@ def process_auto_reassignment(extra_victims: dict = None):
         
         reassignments = check_reassignment(victims, volunteers, existing_matches)
         for r in reassignments:
-            update_record("victims", r["oldVictimId"], {"status": "waiting"})
+            # Mark the new critical victim as matched so no other volunteer gets routed to them during the decision window
             update_record("victims", r["newVictimId"], {"status": "matched"})
+            
+            # Propose the reassignment to the volunteer instead of forcing it
             update_record("matches", r["matchId"], {
-                "victimId": r["newVictimId"],
-                "score": r["newScore"],
-                "eta": r["eta"],
-                "decisionLog": r["decisionLog"],
-                "status": "pending",
-                "timestamp": int(time.time() * 1000)
+                "proposedReassignment": {
+                    "victimId": r["newVictimId"],
+                    "score": r["newScore"],
+                    "eta": r["eta"],
+                    "decisionLog": r["decisionLog"],
+                    "timestamp": int(time.time() * 1000)
+                }
             })
-            print(f"[AUTO-REASSIGN] Rerouted {r['volunteerId']} to {r['newVictimId']}!")
+            print(f"[AUTO-REASSIGN] Proposed rerouting {r['volunteerId']} to {r['newVictimId']}")
         return reassignments
     except Exception as e:
         print(f"[ERROR] Auto-reassign failed: {e}")
@@ -441,6 +444,70 @@ def accept_match() -> tuple:
 
     except Exception as e:
         return jsonify({"error": f"Accept failed: {str(e)}"}), 500
+
+
+@app.route("/api/match/confirm-reassignment", methods=["POST"])
+def confirm_reassignment() -> tuple:
+    try:
+        data = request.get_json()
+        match_id = data.get("matchId")
+        if not match_id:
+            return jsonify({"error": "matchId required"}), 400
+
+        matches = get_all("matches")
+        match = matches.get(match_id)
+        if not match or "proposedReassignment" not in match:
+            return jsonify({"error": "No reassignment proposal found"}), 400
+
+        proposed = match["proposedReassignment"]
+        old_victim_id = match["victimId"]
+        
+        # Free the old victim
+        update_record("victims", old_victim_id, {"status": "waiting"})
+        
+        # Apply the proposed reassignment
+        update_record("matches", match_id, {
+            "victimId": proposed["victimId"],
+            "score": proposed["score"],
+            "eta": proposed["eta"],
+            "decisionLog": proposed["decisionLog"],
+            "status": "pending",
+            "proposedReassignment": None  # Clear proposal
+        })
+
+        return jsonify({"success": True, "message": "Reassignment confirmed"}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Confirm failed: {str(e)}"}), 500
+
+
+@app.route("/api/match/decline-reassignment", methods=["POST"])
+def decline_reassignment() -> tuple:
+    try:
+        data = request.get_json()
+        match_id = data.get("matchId")
+        if not match_id:
+            return jsonify({"error": "matchId required"}), 400
+
+        matches = get_all("matches")
+        match = matches.get(match_id)
+        if not match or "proposedReassignment" not in match:
+            return jsonify({"error": "No reassignment proposal found"}), 400
+
+        proposed = match["proposedReassignment"]
+        
+        # The new victim is marked as "matched" during the proposal window. 
+        # Since volunteer declined, free the new critical victim so others can pick them up.
+        update_record("victims", proposed["victimId"], {"status": "waiting"})
+        
+        update_record("matches", match_id, {
+            "proposedReassignment": None  # Clear proposal
+        })
+
+        return jsonify({"success": True, "message": "Reassignment declined"}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Decline failed: {str(e)}"}), 500
 
 
 @app.route("/api/match/cancel", methods=["POST"])

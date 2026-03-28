@@ -59,6 +59,7 @@ export default function VolunteerPage() {
   const [showModal, setShowModal] = useState(false);
   const [victimDetails, setVictimDetails] = useState(null);
   const [recentVictims, setRecentVictims] = useState([]);
+  const [proposedReassignment, setProposedReassignment] = useState(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -242,6 +243,15 @@ export default function VolunteerPage() {
              
              const victim = victimDict[myMatch.victimId] || null;
 
+             if (myMatch.proposedReassignment) {
+                 const propVic = victimDict[myMatch.proposedReassignment.victimId];
+                 if (propVic) {
+                     setProposedReassignment({ ...myMatch.proposedReassignment, victimData: propVic });
+                 }
+             } else {
+                 setProposedReassignment(null);
+             }
+
              if (victim) {
                if (previousVictimId && previousVictimId !== myMatch.victimId) {
                  setReassigned(true);
@@ -350,6 +360,41 @@ export default function VolunteerPage() {
       setMatchData(null); setVictimDetails(null);
     } catch(err) { console.error(err); }
     finally { processingActionRef.current = false; }
+  };
+
+  const handleConfirmReassignment = async () => {
+    processingActionRef.current = true;
+    try {
+      const res = await fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/match/confirm-reassignment', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchId })
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      setProposedReassignment(null);
+      setReassigned(true);
+      setTimeout(() => setReassigned(false), 8000);
+    } catch (err) {
+      console.error('Confirm reassignment failed:', err);
+    } finally {
+      processingActionRef.current = false;
+    }
+  };
+
+  const handleDeclineReassignment = async () => {
+    processingActionRef.current = true;
+    try {
+      const res = await fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/match/decline-reassignment', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchId })
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      setProposedReassignment(null);
+    } catch (err) {
+      console.error('Decline reassignment failed:', err);
+      setProposedReassignment(null); // Optimistic clear
+    } finally {
+      processingActionRef.current = false;
+    }
   };
 
   const handleCompleteMission = async () => {
@@ -742,15 +787,67 @@ export default function VolunteerPage() {
         </div>
       </div>
 
-      {showModal && victimDetails && (
+      {proposedReassignment && victimDetails && proposedReassignment.victimData && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+          <div className="bg-white/95 backdrop-blur-3xl rounded-[2.5rem] shadow-2xl border border-white/40 max-w-2xl w-full overflow-hidden animate-in zoom-in-95 fade-in duration-300">
+            <div className="p-6 text-white bg-gradient-to-r from-red-600 to-rose-700 animate-pulse">
+               <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-black uppercase tracking-wider drop-shadow-sm">🚨 HIGHER PRIORITY CRITICAL ALERT</h3>
+               </div>
+               <p className="text-sm mt-2 text-white/90 font-medium">A critical emergency has been reported nearby. Will you reassign your current task?</p>
+            </div>
+            
+            <div className="p-6 grid md:grid-cols-2 gap-6 bg-slate-50">
+               {/* Current Task */}
+               <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
+                 <div className="absolute top-0 left-0 w-full h-1.5 bg-blue-500"></div>
+                 <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Current Assignment</div>
+                 <h4 className="text-lg font-black text-slate-800">{victimDetails.name}</h4>
+                 <div className="mt-3 space-y-2">
+                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-bold">Priority</span> <span className="font-black text-blue-600 uppercase">{victimDetails.need}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-bold">Persons</span> <span className="font-black text-slate-700">{victimDetails.totalPersons}</span></div>
+                 </div>
+               </div>
+
+               {/* Proposed Task */}
+               <div className="bg-white p-5 rounded-3xl border-2 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.2)] relative overflow-hidden ring-4 ring-red-500/10">
+                 <div className="absolute top-0 left-0 w-full h-1.5 bg-red-500"></div>
+                 <div className="absolute top-3 right-4 w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+                 <div className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2">New Critical Emergency</div>
+                 <h4 className="text-lg font-black text-slate-900">{proposedReassignment.victimData.name || 'Unknown'}</h4>
+                 <div className="mt-3 space-y-2">
+                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-bold">Priority</span> <span className="font-black text-red-600 uppercase">CRITICAL / {proposedReassignment.victimData.need}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-bold">ETA</span> <span className="font-black text-slate-700">{proposedReassignment.eta} min</span></div>
+                 </div>
+               </div>
+            </div>
+
+            <div className="p-6 pt-2 flex space-x-4 bg-slate-50">
+              <button 
+                onClick={handleDeclineReassignment} disabled={processingActionRef.current}
+                className="flex-1 py-4 bg-white border-2 border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-colors text-slate-600 rounded-2xl font-black text-sm uppercase tracking-wider shadow-sm disabled:opacity-50">
+                Keep Current
+              </button>
+              <button 
+                onClick={handleConfirmReassignment} disabled={processingActionRef.current}
+                className="flex-[2] py-4 bg-gradient-to-r from-red-600 to-rose-600 hover:shadow-[0_8px_30px_rgba(225,29,72,0.4)] transition-all hover:-translate-y-1 text-white rounded-2xl font-black text-lg uppercase tracking-widest shadow-xl disabled:opacity-50 flex items-center justify-center space-x-2">
+                <span>Reassign Now</span>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!proposedReassignment && showModal && victimDetails && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
           <div className="bg-white/95 backdrop-blur-3xl rounded-[2.5rem] shadow-2xl border border-white/40 max-w-lg w-full overflow-hidden animate-in zoom-in-95 fade-in duration-300">
             <div className={`p-8 text-white ${victimDetails.escalated ? 'bg-gradient-to-r from-red-600 to-rose-700 animate-pulse' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>
-              <div className="flex items-center justify-between">
-                 <h3 className="text-xl font-black uppercase tracking-wider drop-shadow-sm">{victimDetails.escalated ? '🚨 CRITICAL ESCALATION' : '🚨 Incoming Assignment'}</h3>
-                 <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-lg text-sm font-bold border border-white/20 shadow-inner">ETA: {matchData?.distance}</span>
-              </div>
-              <p className="text-sm mt-3 text-white/90 font-medium">{victimDetails.name} needs urgent assistance.</p>
+               <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-black uppercase tracking-wider drop-shadow-sm">{victimDetails.escalated ? '🚨 CRITICAL ESCALATION' : '🚨 Incoming Assignment'}</h3>
+                  <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-lg text-sm font-bold border border-white/20 shadow-inner">ETA: {matchData?.distance}</span>
+               </div>
+               <p className="text-sm mt-3 text-white/90 font-medium">{victimDetails.name} needs urgent assistance.</p>
             </div>
             
             <div className="p-8 space-y-4">

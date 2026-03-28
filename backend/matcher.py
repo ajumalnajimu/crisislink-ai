@@ -290,6 +290,10 @@ def check_reassignment(
             if match_id in reassigned_matches:
                 continue
 
+            # Don't propose a new reassignment if they are already reviewing one
+            if current_match.get("proposedReassignment"):
+                continue
+
             current_volunteer_id = current_match.get("volunteerId", "")
             current_score = current_match.get("score", 0)
 
