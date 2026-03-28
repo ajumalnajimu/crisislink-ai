@@ -69,11 +69,11 @@ export default function AuthorityPage() {
     const fetchData = async () => {
       try {
         const [vicRes, volRes, matchRes, alertRes, briefRes] = await Promise.all([
-          fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/victims').then(r => r.json()),
-          fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/volunteers').then(r => r.json()),
-          fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/matches').then(r => r.json()),
-          fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/alerts').then(r => r.json()),
-          fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/briefing/authority').then(r => r.json())
+          fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/victims').then(r => r.json()),
+          fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/volunteers').then(r => r.json()),
+          fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/matches').then(r => r.json()),
+          fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/alerts').then(r => r.json()),
+          fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/briefing/authority').then(r => r.json())
         ]);
 
         const newMarkers = [];
@@ -156,7 +156,7 @@ export default function AuthorityPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleReassign = () => fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/reassign', { method: 'POST' });
+  const handleReassign = () => fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/reassign', { method: 'POST' });
 
   const filteredMarkers = activeFilter === 'all' 
     ? markers 

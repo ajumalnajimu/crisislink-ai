@@ -17,7 +17,7 @@ export default function AIBriefing({ role, content }) {
 
     const fetchBriefing = async () => {
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/briefing/${role}`);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')}/api/briefing/${role}`);
         const data = await res.json();
         
         if (isMounted) {
