@@ -9,12 +9,12 @@ import math
 from typing import Any
 
 
-# Urgency weights by need type
-URGENCY_WEIGHTS: dict[str, int] = {
-    "medical": 10,
-    "rescue": 8,
-    "shelter": 5,
-    "food": 3,
+# Urgency bonus by need type (added to victim's own urgency value)
+URGENCY_BONUS: dict[str, int] = {
+    "medical": 2,
+    "rescue": 1,
+    "shelter": 0,
+    "food": 0,
 }
 
 # Situation difficulty multipliers for ETA
@@ -74,14 +74,14 @@ def calculate_score(
     """
     # --- Urgency component (boosted by vulnerable persons) ---
     need = victim.get("need", "food").lower()
-    urgency_raw = victim.get("urgency", 3)
+    urgency_raw = int(victim.get("urgency", 3))
     
     if need == "sos":
         effective_urgency = 10
-        urgency_weight = 10
+        need_bonus = 0
         vuln_boost = 0
     else:
-        urgency_weight = URGENCY_WEIGHTS.get(need, 3)
+        need_bonus = URGENCY_BONUS.get(need, 0)
         # Boost urgency for vulnerable persons
         vulnerable = victim.get("vulnerablePersons", {})
         vuln_boost = 0
@@ -91,7 +91,8 @@ def calculate_score(
             vuln_boost += 2
         if vulnerable.get("patientPresent"):
             vuln_boost += 3
-        effective_urgency = min(urgency_weight + vuln_boost, 10)
+        # Use the ACTUAL victim urgency value + need bonus + vuln boost
+        effective_urgency = min(urgency_raw + need_bonus + vuln_boost, 10)
 
     # Escalated victims always get maximum urgency
     if victim.get("escalated"):
@@ -142,7 +143,7 @@ def calculate_score(
 
     sit_info = f", situations={active_situations}, speed_mult={max_multiplier}x" if active_situations else ""
     decision_log = (
-        f"Score {score}: urgency={effective_urgency}/10 (base={urgency_weight}, vuln_boost=+{vuln_boost}, ×0.5={urgency_component:.2f}), "
+        f"Score {score}: urgency={effective_urgency}/10 (raw={urgency_raw}, need_bonus=+{need_bonus}, vuln_boost=+{vuln_boost}, ×0.5={urgency_component:.2f}), "
         f"dist={distance_km:.2f}km (score={distance_score:.2f}, ×0.3={distance_component:.2f}), "
         f"resource={'MATCH' if resource_match == 1.0 else 'PARTIAL'} (×0.2={resource_component:.2f}), "
         f"ETA≈{eta_minutes}min{sit_info}"
@@ -224,10 +225,9 @@ def run_matching(
     # Sort victims by urgency (highest first) for greedy matching
     sorted_victims = sorted(
         victims.items(),
-        key=lambda item: URGENCY_WEIGHTS.get(
-            item[1].get("need", "food").lower(), 3
-        )
-        * item[1].get("urgency", 1),
+        key=lambda item: int(item[1].get("urgency", 1)) + URGENCY_BONUS.get(
+            item[1].get("need", "food").lower(), 0
+        ),
         reverse=True,
     )
 
