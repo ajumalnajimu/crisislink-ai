@@ -280,8 +280,16 @@ def check_reassignment(
         if vid not in matched_victim_ids and v.get("status", "").lower() == "waiting"
     }
 
+    reassigned_matches = set()
+
     for new_victim_id, new_victim in unmatched_victims.items():
+        best_reassignment = None
+        best_improvement = 0.0
+
         for match_id, current_match in existing_matches.items():
+            if match_id in reassigned_matches:
+                continue
+
             current_volunteer_id = current_match.get("volunteerId", "")
             current_score = current_match.get("score", 0)
 
@@ -290,24 +298,28 @@ def check_reassignment(
                 continue
 
             new_score, new_decision_log, new_eta = calculate_score(new_victim, volunteer)
+            improvement = new_score - current_score
 
-            if new_score > current_score + REASSIGNMENT_THRESHOLD:
-                reassignments.append(
-                    {
-                        "matchId": match_id,
-                        "oldVictimId": current_match.get("victimId"),
-                        "newVictimId": new_victim_id,
-                        "volunteerId": current_volunteer_id,
-                        "oldScore": current_score,
-                        "newScore": new_score,
-                        "eta": new_eta,
-                        "decisionLog": (
-                            f"REASSIGNED: {new_decision_log} | "
-                            f"Previous assignment score was {current_score:.4f}, "
-                            f"improvement of {new_score - current_score:.4f} "
-                            f"(threshold={REASSIGNMENT_THRESHOLD})"
-                        ),
-                    }
-                )
+            if improvement > REASSIGNMENT_THRESHOLD and improvement > best_improvement:
+                best_improvement = improvement
+                best_reassignment = {
+                    "matchId": match_id,
+                    "oldVictimId": current_match.get("victimId"),
+                    "newVictimId": new_victim_id,
+                    "volunteerId": current_volunteer_id,
+                    "oldScore": current_score,
+                    "newScore": new_score,
+                    "eta": new_eta,
+                    "decisionLog": (
+                        f"REASSIGNED: {new_decision_log} | "
+                        f"Previous assignment score was {current_score:.4f}, "
+                        f"improvement of {new_score - current_score:.4f} "
+                        f"(threshold={REASSIGNMENT_THRESHOLD})"
+                    ),
+                }
+
+        if best_reassignment:
+            reassignments.append(best_reassignment)
+            reassigned_matches.add(best_reassignment["matchId"])
 
     return reassignments

@@ -139,6 +139,8 @@ def process_auto_reassignment():
                 "score": r["newScore"],
                 "eta": r["eta"],
                 "decisionLog": r["decisionLog"],
+                "status": "pending",
+                "timestamp": int(time.time() * 1000)
             })
             print(f"[AUTO-REASSIGN] Rerouted {r['volunteerId']} to {r['newVictimId']}!")
         return reassignments
@@ -574,6 +576,7 @@ def escalate_victim() -> tuple:
                 "eta": r["eta"],
                 "decisionLog": r["decisionLog"],
                 "status": "pending",
+                "timestamp": int(time.time() * 1000)
             })
             print(f"[ESCALATION REASSIGN] Rerouted {r['volunteerId']} to {r['newVictimId']}!")
 
@@ -744,7 +747,10 @@ def background_timeout_worker() -> None:
                                 update_record("victims", vic_id, {"status": "matched"})
                                 update_record("volunteers", new_match["volunteerId"], {"status": "assigned"})
                                 print(f"[BACKGROUND] Instantly rematched victim {vic_id} to {new_match['volunteerId']}")
-                        
+                            else:
+                                print(f"[BACKGROUND] No available volunteers for {vic_id}, checking reassignment...")
+                                process_auto_reassignment()
+                                
         except Exception as e:
             print(f"[BACKGROUND] Error in timeout worker: {e}")
             
