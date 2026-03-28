@@ -58,6 +58,7 @@ export default function VolunteerPage() {
   const [matchAccepted, setMatchAccepted] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [victimDetails, setVictimDetails] = useState(null);
+  const [recentVictims, setRecentVictims] = useState([]);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -216,9 +217,21 @@ export default function VolunteerPage() {
       // Don't poll while user is actively accepting/declining
       if (processingActionRef.current) return;
       try {
-        const res = await fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/matches');
-        const data = await res.json();
+        const [matchRes, vicRes] = await Promise.all([
+           fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/matches'),
+           fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/victims')
+        ]);
+        const data = await matchRes.json();
+        const vicData = await vicRes.json();
         
+        let victimDict = {};
+        if (vicData.success && vicData.victims) {
+            victimDict = vicData.victims;
+            const victimsArray = Object.entries(victimDict).map(([id, v]) => ({ id, ...v }));
+            victimsArray.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            setRecentVictims(victimsArray.slice(0, 50));
+        }
+
         if (data.success && data.matches) {
            const matchEntries = Object.entries(data.matches);
            const myMatchEntry = matchEntries.find(([, m]) => m.volunteerId === volunteerId);
@@ -227,9 +240,7 @@ export default function VolunteerPage() {
              const [mId, myMatch] = myMatchEntry;
              setMatchId(mId);
              
-             const vicRes = await fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/victims');
-             const vicData = await vicRes.json();
-             const victim = vicData.victims ? vicData.victims[myMatch.victimId] : null;
+             const victim = victimDict[myMatch.victimId] || null;
 
              if (victim) {
                if (previousVictimId && previousVictimId !== myMatch.victimId) {
@@ -599,7 +610,7 @@ export default function VolunteerPage() {
           </div>
         )}
 
-        <div className="grid xl:grid-cols-3 gap-8">
+        <div className="grid xl:grid-cols-4 gap-8">
           
           {/* Left Column */}
           <div className="xl:col-span-1 space-y-8">
@@ -684,6 +695,48 @@ export default function VolunteerPage() {
                  ...(matchData && matchData.lat ? [{ position: [matchData.lat, matchData.lng], type: 'victim', need: matchData.need, name: matchData.matchedVictim }] : [])
                ]} 
              />
+          </div>
+
+          {/* Right Column (History Feed) */}
+          <div className={`xl:col-span-1 border rounded-[2rem] p-5 space-y-4 shadow-sm backdrop-blur-xl ${isEscalated ? 'border-red-500/30 bg-red-950/20' : 'border-white/40 glass-panel'} max-h-[800px] overflow-y-auto`}>
+            <div className="flex items-center justify-between mb-4 sticky top-0 z-10">
+               <h3 className={`font-black uppercase tracking-widest text-sm drop-shadow-sm ${isEscalated ? 'text-red-200' : 'text-slate-800'}`}>Global SOS Feed</h3>
+               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
+            </div>
+            {recentVictims.length === 0 ? (
+               <div className="text-center p-6 text-sm font-bold text-slate-500 italic">No historical SOS broadcasts.</div>
+            ) : (
+               <div className="space-y-3">
+                  {recentVictims.map((vic) => {
+                     const isCrit = vic.urgency >= 8 || vic.escalated;
+                     const isHigh = vic.urgency >= 6 && vic.urgency < 8;
+                     
+                     let timeStr = 'Just now';
+                     if (vic.timestamp) {
+                       const d = new Date(vic.timestamp);
+                       timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                     }
+                     
+                     return (
+                        <div key={vic.id} className={`p-4 rounded-xl border flex flex-col transition-all hover:-translate-y-0.5 shadow-sm ${isCrit ? 'bg-red-50/90 border-red-200' : isHigh ? 'bg-orange-50/90 border-orange-200' : 'bg-white/80 border-slate-200'}`}>
+                           <div className="flex justify-between items-start mb-1 gap-2">
+                              <span className={`text-sm font-black truncate leading-tight ${isCrit ? 'text-red-900' : 'text-slate-800'}`}>{vic.name || 'Unknown'}</span>
+                              <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap pt-0.5">{timeStr}</span>
+                           </div>
+                           <div className="flex justify-between items-center mt-2">
+                              <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md leading-none flex items-center ${isCrit ? 'bg-red-200 text-red-800 shadow-[0_0_8px_rgba(239,68,68,0.3)]' : isHigh ? 'bg-orange-200 text-orange-800' : 'bg-blue-100 text-blue-700'}`}>
+                                 {isCrit && <span className="mr-1 animate-pulse">●</span>}
+                                 {isCrit ? 'Critical' : isHigh ? 'High' : vic.need}
+                              </span>
+                              <span className={`text-[10px] font-bold uppercase tracking-wider ${vic.status === 'matched' ? 'text-emerald-600' : 'text-slate-500'}`}>
+                                 {vic.status === 'matched' ? 'Assigned' : 'Waiting'}
+                              </span>
+                           </div>
+                        </div>
+                     );
+                  })}
+               </div>
+            )}
           </div>
           
         </div>
