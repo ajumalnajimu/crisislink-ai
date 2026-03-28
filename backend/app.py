@@ -549,19 +549,33 @@ def escalate_victim() -> tuple:
         if not victim_id:
             return jsonify({"error": "victimId required"}), 400
 
-        update_record("victims", victim_id, {"urgency": 10, "escalated": True})
+        update_record("victims", victim_id, {"urgency": 10, "escalated": True, "need": "medical"})
         
-        # Re-run matching so that if they were waiting, they might jump the queue
+        # Re-read all data AFTER the update so the escalated flag is visible
         victims = get_all("victims")
         volunteers = get_all("volunteers")
+        existing_matches = get_all("matches")
+        
+        # First try normal matching for waiting victims
         matches = run_matching(victims, volunteers)
         for match in matches:
             push_record("matches", match)
             update_record("victims", match["victimId"], {"status": "matched"})
             update_record("volunteers", match["volunteerId"], {"status": "assigned"})
             
-        # Try hijacking assigned volunteers via automatic reassignment
-        process_auto_reassignment()
+        # Force reassignment check — the escalated victim now has max urgency
+        reassignments = check_reassignment(victims, volunteers, existing_matches)
+        for r in reassignments:
+            update_record("victims", r["oldVictimId"], {"status": "waiting"})
+            update_record("victims", r["newVictimId"], {"status": "matched"})
+            update_record("matches", r["matchId"], {
+                "victimId": r["newVictimId"],
+                "score": r["newScore"],
+                "eta": r["eta"],
+                "decisionLog": r["decisionLog"],
+                "status": "pending",
+            })
+            print(f"[ESCALATION REASSIGN] Rerouted {r['volunteerId']} to {r['newVictimId']}!")
 
         return jsonify({"success": True, "message": "Emergency escalated!"}), 200
 

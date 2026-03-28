@@ -670,7 +670,7 @@ export default function VolunteerPage() {
              </div>
 
              <Map 
-               center={matchData && matchAccepted ? [matchData.lat || 10.8505, matchData.lng || 76.2711] : [10.8505, 76.2711]}
+               center={matchData && matchData.lat ? [matchData.lat, matchData.lng] : [10.8505, 76.2711]}
                zoom={14}
                markers={[
                  ...(() => {
@@ -679,7 +679,7 @@ export default function VolunteerPage() {
                    if (isNaN(parts[0]) || isNaN(parts[1])) return [];
                    return [{ position: parts, type: 'volunteer', name: `${unitName} (You)` }];
                  })(),
-                 ...(matchData && matchData.lat && matchAccepted ? [{ position: [matchData.lat, matchData.lng], type: 'victim', need: matchData.need, name: matchData.matchedVictim }] : [])
+                 ...(matchData && matchData.lat ? [{ position: [matchData.lat, matchData.lng], type: 'victim', need: matchData.need, name: matchData.matchedVictim }] : [])
                ]} 
              />
           </div>

@@ -15,11 +15,12 @@ export default function AuthorityPage() {
   const [alertData, setAlertData] = useState(null);
   const [markers, setMarkers] = useState([]);
   const [briefingContent, setBriefingContent] = useState(null);
-  const [stats, setStats] = useState({ activeIncidents: 0, unitsRouting: 0 });
+  const [stats, setStats] = useState({ activeIncidents: 0, unitsRouting: 0, totalVictims: 0, totalVolunteers: 0 });
   const [activeFilter, setActiveFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('explorer');
   const [geoTrigger, setGeoTrigger] = useState(0);
   const [flyToTarget, setFlyToTarget] = useState(null);
+  const [routePairs, setRoutePairs] = useState([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [isSignup, setIsSignup] = useState(false);
@@ -126,7 +127,20 @@ export default function AuthorityPage() {
         }
         
         setMarkers(newMarkers);
-        setStats({ activeIncidents: incidents, unitsRouting: units });
+        setStats({ activeIncidents: incidents, unitsRouting: units, totalVictims: Object.keys(vicRes.victims || {}).length, totalVolunteers: Object.keys(volRes.volunteers || {}).length });
+
+        // Build route pairs from matches for map flow lines
+        if (matchRes.success && matchRes.matches && vicRes.victims && volRes.volunteers) {
+          const pairs = [];
+          Object.values(matchRes.matches).forEach(m => {
+            const vic = vicRes.victims[m.victimId];
+            const vol = volRes.volunteers[m.volunteerId];
+            if (vic && vol && vic.lat && vic.lng && vol.lat && vol.lng) {
+              pairs.push({ from: [vol.lat, vol.lng], to: [vic.lat, vic.lng] });
+            }
+          });
+          setRoutePairs(pairs);
+        }
 
         if (matchRes.success && matchRes.matches) {
           const newLogs = Object.values(matchRes.matches).map((m, i) => ({
@@ -144,7 +158,11 @@ export default function AuthorityPage() {
         }
 
         if (briefRes.success) {
-          setBriefingContent(briefRes.briefing);
+          const statsSummary = `📊 Total Victims: ${Object.keys(vicRes.victims || {}).length} | Total Volunteers: ${Object.keys(volRes.volunteers || {}).length} | Active Matches: ${Object.keys(matchRes.matches || {}).length}\n\n`;
+          setBriefingContent(statsSummary + (briefRes.briefing || ''));
+        } else {
+          const statsSummary = `📊 Total Victims: ${Object.keys(vicRes.victims || {}).length} | Total Volunteers: ${Object.keys(volRes.volunteers || {}).length}\n\n`;
+          setBriefingContent(statsSummary + (briefRes.briefing || 'Generating AI analysis...'));
         }
       } catch (err) {
         // Silently caught polling drop
@@ -373,7 +391,7 @@ export default function AuthorityPage() {
                </div>
              </div>
 
-             <Map markers={filteredMarkers} center={[20.5937, 78.9629]} zoom={5} flyToTarget={flyToTarget} />
+             <Map markers={filteredMarkers} center={[20.5937, 78.9629]} zoom={5} flyToTarget={flyToTarget} routeFrom={routePairs[0]?.from} routeTo={routePairs[0]?.to} />
            </div>
         </div>
         
