@@ -604,6 +604,53 @@ def list_matches() -> tuple:
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/matches/<match_id>/complete", methods=["POST"])
+def complete_match(match_id: str) -> tuple:
+    """Complete a rescue mission, free the volunteer, and mark victim as rescued."""
+    try:
+        match = db.child("matches").child(match_id).get().val()
+        if not match:
+            return jsonify({"error": "Match not found"}), 404
+
+        vic_id = match.get("victimId")
+        vol_id = match.get("volunteerId")
+
+        db.child("matches").child(match_id).remove()
+
+        if vic_id:
+            update_record("victims", vic_id, {"status": "rescued"})
+        if vol_id:
+            update_record("volunteers", vol_id, {"status": "available"})
+            
+        print(f"[MISSION COMPLETE] Match {match_id} completed.")
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/victim/<victim_id>/cancel", methods=["POST"])
+def cancel_victim(victim_id: str) -> tuple:
+    """Cancel a victim request and clean up any pending matches."""
+    try:
+        vic = db.child("victims").child(victim_id).get().val()
+        if not vic:
+            return jsonify({"error": "Victim not found"}), 404
+
+        update_record("victims", victim_id, {"status": "cancelled"})
+        
+        # Cleanup matches associated with victim
+        matches = get_all("matches")
+        for m_id, m in matches.items():
+            if m.get("victimId") == victim_id:
+                db.child("matches").child(m_id).remove()
+                vol_id = m.get("volunteerId")
+                if vol_id:
+                    update_record("volunteers", vol_id, {"status": "available"})
+
+        print(f"[CANCELLED] Victim {victim_id} cancelled.")
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # ── Background Worker ────────────────────────────────────────────────────────
 

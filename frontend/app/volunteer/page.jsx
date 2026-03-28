@@ -261,6 +261,15 @@ export default function VolunteerPage() {
                });
 
                if (myMatch.status === 'pending' && !matchAcceptedRef.current) {
+                 if (!showModal) {
+                   try {
+                     const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                     const osc = ctx.createOscillator();
+                     osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+                     osc.connect(ctx.destination);
+                     osc.start(); osc.stop(ctx.currentTime + 0.15);
+                   } catch(e) { console.warn("Audio chime failed to play"); }
+                 }
                  setShowModal(true);
                  if ("Notification" in window && Notification.permission === "granted") {
                    new Notification(victim.escalated ? `🚨 CRITICAL ESCALATION` : `🚨 Incoming Assignment`, {
@@ -313,17 +322,23 @@ export default function VolunteerPage() {
 
   const handleDecline = async () => {
     processingActionRef.current = true;
-    // Immediately dismiss the modal
     setShowModal(false);
+    if (!matchId) return;
     try {
-      const res = await fetch('http://localhost:5000/api/match/cancel', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchId, volunteerId, victimId: victimDetails?.id })
+      await fetch(`http://localhost:5000/api/matches/${matchId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'declined' })
       });
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
-    } catch (err) {
-      console.error('Decline failed:', err);
-    } finally {
+      setMatchData(null); setVictimDetails(null);
+    } catch(err) { console.error(err); }
+    finally { processingActionRef.current = false; }
+  };
+
+  const handleCompleteMission = async () => {
+    if (!matchId) return;
+    try {
+      await fetch(`http://localhost:5000/api/matches/${matchId}/complete`, {
+        method: 'POST',
+      });
       setMatchData(null);
       setMatchId(null);
       setVictimDetails(null);
@@ -331,6 +346,8 @@ export default function VolunteerPage() {
       matchAcceptedRef.current = false;
       previousVictimIdRef.current = null;
       processingActionRef.current = false;
+    } catch (e) {
+      console.error("Failed to complete mission:", e);
     }
   };
 
@@ -608,6 +625,10 @@ export default function VolunteerPage() {
                     {victimDetails.customMessage && (
                       <div className={`p-4 rounded-xl italic border backdrop-blur-sm ${isEscalated ? 'bg-red-900/50 border-red-800/50' : 'bg-amber-100/40 border-amber-200/50 text-amber-900'}`}>{victimDetails.customMessage}</div>
                     )}
+
+                    <button onClick={handleCompleteMission} className={`w-full py-4 mt-4 rounded-xl font-black text-sm uppercase tracking-widest shadow-xl transition-all hover:-translate-y-1 ${isEscalated ? 'bg-red-600 hover:bg-red-500 text-white shadow-[0_8px_30px_rgba(220,38,38,0.4)]' : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-[0_8px_30px_rgba(16,185,129,0.3)] text-white'}`}>
+                      🏁 Complete Rescue Mission
+                    </button>
                   </div>
                 </div>
               )}

@@ -145,6 +145,13 @@ export default function VictimPage() {
 
     const pollMatches = async () => {
       try {
+        const vicRes = await fetch(`http://localhost:5000/api/victim/${victimId}`);
+        const vicData = await vicRes.json();
+        if (vicData.success && vicData.victim && vicData.victim.status === 'rescued') {
+            setMatchData({ isRescued: true });
+            return;
+        }
+
         const res = await fetch('http://localhost:5000/api/matches');
         const data = await res.json();
         
@@ -221,6 +228,16 @@ export default function VictimPage() {
       console.error(err);
     } finally {
       setIsEscalating(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!victimId || confirm("Are you sure you want to cancel your rescue request?") !== true) return;
+    try {
+      await fetch(`http://localhost:5000/api/victim/${victimId}/cancel`, { method: 'POST' });
+      endSession();
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -567,6 +584,7 @@ export default function VictimPage() {
                        </button>
                     </div>
                   </div>
+                  <p className="pl-5 text-[11px] text-slate-500 font-medium">Demo Tip: If GPS fails indoors, manually type <span className="font-bold text-slate-700 font-mono">12.9716, 77.5946</span></p>
 
                   <button type="submit" disabled={isGeocoding || !priority} className="w-full mt-6 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-black text-lg uppercase tracking-widest shadow-[0_8px_30px_rgba(79,70,229,0.3)] hover:shadow-[0_8px_40px_rgba(79,70,229,0.5)] transition-all hover:-translate-y-1">
                     {isGeocoding ? 'Calculating Trajectory...' : 'Broadcasting Signal'}
@@ -578,24 +596,44 @@ export default function VictimPage() {
           <div className="grid lg:grid-cols-5 gap-8">
             <div className="lg:col-span-3 space-y-8">
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                <VictimCard 
-                  victim={{
-                    name: name || 'Unknown',
-                    need: computeNeed(),
-                    status: matchData ? matchData.status : 'Broadcasting Signal...',
-                    eta: matchData ? matchData.eta : 'Calculating...',
-                    location: locationStr
-                  }} 
-                />
+                {!matchData?.isRescued && (
+                  <VictimCard 
+                    victim={{
+                      name: name || 'Unknown',
+                      need: computeNeed(),
+                      status: matchData ? matchData.status : 'Broadcasting Signal...',
+                      eta: matchData ? matchData.eta : 'Calculating...',
+                      location: locationStr
+                    }} 
+                  />
+                )}
+                
+                {matchData?.isRescued && (
+                  <div className="bg-gradient-to-r from-emerald-500 to-teal-500 p-8 rounded-[3rem] text-white text-center shadow-2xl animate-in zoom-in duration-500 border-4 border-white mt-12">
+                    <div className="text-6xl mb-4">💚</div>
+                    <h2 className="text-3xl font-black uppercase tracking-widest mb-2">You Are Safe!</h2>
+                    <p className="font-medium text-emerald-50 mb-8">Your rescue mission has been marked as complete by the responding unit.</p>
+                    <button onClick={endSession} className="px-8 py-4 bg-white text-emerald-700 font-bold rounded-2xl shadow-lg hover:scale-105 transition-transform uppercase tracking-wider text-sm border-2 border-emerald-100">Start New Session</button>
+                  </div>
+                )}
                 
                 {/* Panic Button */}
-                {priority !== 'critical' && (
+                {!matchData?.isRescued && priority !== 'critical' && (
                   <button 
                     onClick={handleEscalate} 
                     disabled={isEscalating}
                     className="w-full py-5 rounded-3xl font-black text-xl uppercase tracking-widest transition-all bg-red-600 text-white shadow-[0_0_30px_rgba(220,38,38,0.5)] border-4 border-red-400 hover:bg-red-500 hover:scale-[1.02] active:scale-95 cursor-pointer"
                   >
                     {isEscalating ? 'Escalating...' : '🚨 Escalate Emergency'}
+                  </button>
+                )}
+
+                {!matchData?.isRescued && (
+                  <button 
+                    onClick={handleCancelRequest} 
+                    className="w-full py-4 rounded-3xl font-black text-sm uppercase tracking-widest transition-all glass-panel text-slate-500 hover:text-red-500 hover:bg-white/50 border border-transparent hover:border-red-200 shadow-sm cursor-pointer"
+                  >
+                    ✕ Cancel Request
                   </button>
                 )}
               </div>
