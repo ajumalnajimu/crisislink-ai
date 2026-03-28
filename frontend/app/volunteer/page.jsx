@@ -357,9 +357,25 @@ export default function VolunteerPage() {
     }
   };
 
-  const endShift = () => {
+  const cleanupAndReset = async () => {
+    // Cancel any active match on the backend before resetting
+    if (matchId) {
+      try {
+        await fetch((process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')) + '/api/match/cancel', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matchId, volunteerId, victimId: previousVictimIdRef.current })
+        });
+      } catch(e) {}
+    }
     localStorage.removeItem('crisislink_volunteerId');
-    setRegistered(false); setVolunteerId(null); setMatchData(null); setVictimDetails(null);
+    setRegistered(false); setVolunteerId(null); setMatchData(null); setMatchId(null);
+    setVictimDetails(null); setMatchAccepted(false); setShowModal(false);
+    matchAcceptedRef.current = false; showModalRef.current = false;
+    previousVictimIdRef.current = null; processingActionRef.current = false;
+  };
+
+  const endShift = () => {
+    cleanupAndReset();
   };
 
   const situationLabels = { trapped: '🔒 Trapped', waterRising: '🌊 Water Rising', fireNearby: '🔥 Fire Nearby', buildingCollapse: '🏚️ Building Risk' };
@@ -562,7 +578,7 @@ export default function VolunteerPage() {
               <button onClick={handleLogout} className={`px-4 py-2 font-bold rounded-xl text-sm transition-colors border backdrop-blur-sm ${isEscalated ? 'bg-red-900/50 text-red-100 hover:bg-red-800 border-red-500/30' : 'bg-white/40 text-slate-600 hover:bg-white/60 border-slate-300 shadow-sm'}`}>
                 Switch Account
               </button>
-              <button onClick={() => { localStorage.removeItem('crisislink_volunteerId'); setRegistered(false); setVolunteerId(null); setMatchData(null); setVictimDetails(null); setMatchAccepted(false); matchAcceptedRef.current = false; }} className={`px-5 py-2 font-bold rounded-xl text-sm transition-colors border shadow-sm ${isEscalated ? 'bg-red-600/90 text-white hover:bg-red-500 border-red-500' : 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/20'}`}>
+              <button onClick={cleanupAndReset} className={`px-5 py-2 font-bold rounded-xl text-sm transition-colors border shadow-sm ${isEscalated ? 'bg-red-600/90 text-white hover:bg-red-500 border-red-500' : 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/20'}`}>
                 Change Resource
               </button>
             </div>

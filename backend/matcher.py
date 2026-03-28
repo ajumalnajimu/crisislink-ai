@@ -26,7 +26,7 @@ SITUATION_MULTIPLIERS: dict[str, float] = {
 }
 
 # Reassignment threshold: new score must exceed current by this much
-REASSIGNMENT_THRESHOLD: float = 1.5
+REASSIGNMENT_THRESHOLD: float = 0.05
 
 
 def haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -92,7 +92,11 @@ def calculate_score(
         if vulnerable.get("patientPresent"):
             vuln_boost += 3
         effective_urgency = min(urgency_weight + vuln_boost, 10)
-        
+
+    # Escalated victims always get maximum urgency
+    if victim.get("escalated"):
+        effective_urgency = 10
+
     urgency_component = (effective_urgency / 10) * 0.5
 
     # --- Distance component ---
