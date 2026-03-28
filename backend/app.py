@@ -135,8 +135,8 @@ def process_auto_reassignment(extra_victims: dict = None):
         
         reassignments = check_reassignment(victims, volunteers, existing_matches)
         for r in reassignments:
-            # Mark the new critical victim as matched so no other volunteer gets routed to them during the decision window
-            update_record("victims", r["newVictimId"], {"status": "matched"})
+            # Mark the new critical victim as pending so no other volunteer gets routed to them during the decision window
+            update_record("victims", r["newVictimId"], {"status": "pending_assignment"})
             
             # Propose the reassignment to the volunteer instead of forcing it
             update_record("matches", r["matchId"], {
@@ -204,8 +204,8 @@ def create_victim() -> tuple:
 
         if match:
             match_id = push_record("matches", match)
-            update_record("victims", victim_id, {"status": "matched"})
-            update_record("volunteers", match["volunteerId"], {"status": "assigned"})
+            update_record("victims", victim_id, {"status": "pending_assignment"})
+            update_record("volunteers", match["volunteerId"], {"status": "pending_assignment"})
             return jsonify({
                 "success": True,
                 "victimId": victim_id,
@@ -270,8 +270,8 @@ def create_volunteer() -> tuple:
             new_matches = run_matching(victims, {volunteer_id: volunteer})
             for m in new_matches:
                 push_record("matches", m)
-                update_record("victims", m["victimId"], {"status": "matched"})
-                update_record("volunteers", m["volunteerId"], {"status": "assigned"})
+                update_record("victims", m["victimId"], {"status": "pending_assignment"})
+                update_record("volunteers", m["volunteerId"], {"status": "pending_assignment"})
 
         return jsonify({
             "success": True,
@@ -301,9 +301,9 @@ def run_match() -> tuple:
         for match in matches:
             match_id = push_record("matches", match)
             if match_id:
-                update_record("victims", match["victimId"], {"status": "matched"})
+                update_record("victims", match["victimId"], {"status": "pending_assignment"})
                 update_record(
-                    "volunteers", match["volunteerId"], {"status": "assigned"}
+                    "volunteers", match["volunteerId"], {"status": "pending_assignment"}
                 )
                 match["matchId"] = match_id
                 saved_matches.append(match)
@@ -439,6 +439,11 @@ def accept_match() -> tuple:
         # Update match status
         update_record("matches", match_id, {"status": "accepted"})
         update_record("volunteers", volunteer_id, {"status": "en_route"})
+        
+        matches = get_all("matches")
+        match = matches.get(match_id)
+        if match and "victimId" in match:
+            update_record("victims", match["victimId"], {"status": "matched"})
 
         return jsonify({"success": True, "message": "Match accepted"}), 200
 
@@ -466,12 +471,13 @@ def confirm_reassignment() -> tuple:
         update_record("victims", old_victim_id, {"status": "waiting"})
         
         # Apply the proposed reassignment
+        update_record("victims", proposed["victimId"], {"status": "matched"})
         update_record("matches", match_id, {
             "victimId": proposed["victimId"],
             "score": proposed["score"],
             "eta": proposed["eta"],
             "decisionLog": proposed["decisionLog"],
-            "status": "pending",
+            "status": "accepted",
             "proposedReassignment": None  # Clear proposal
         })
 

@@ -164,7 +164,7 @@ export default function VictimPage() {
              const volData = await volRes.json();
              const volunteer = volData.volunteers ? volData.volunteers[myMatch.volunteerId] : null;
 
-             if (volunteer) {
+             if (volunteer && myMatch.status === 'accepted') {
                if (previousVolunteerId && previousVolunteerId !== myMatch.volunteerId) {
                  setReassignedAlert(true);
                  setTimeout(() => setReassignedAlert(false), 8000);
@@ -182,8 +182,11 @@ export default function VictimPage() {
                  volunteerId: myMatch.volunteerId,
                  volunteerName: volunteer.name || 'Unknown',
                  eta: currentEtaStr,
-                 status: myMatch.status === 'accepted' ? `${volunteer.name} En Route!` : `Awaiting ${volunteer.name}'s response...`
+                 status: `${volunteer.name} En Route!`
                });
+             } else {
+               // Not accepted yet
+               setMatchData(null);
              }
            } else {
              // Lost match
