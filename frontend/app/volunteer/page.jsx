@@ -236,6 +236,8 @@ export default function VolunteerPage() {
                  setReassigned(true);
                  setMatchAccepted(false);
                  matchAcceptedRef.current = false;
+                 setShowModal(false);
+                 showModalRef.current = false;
                  setTimeout(() => setReassigned(false), 8000);
                }
                previousVictimId = myMatch.victimId;

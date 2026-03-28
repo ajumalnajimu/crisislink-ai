@@ -123,10 +123,13 @@ def set_record(path: str, key: str, data: dict[str, Any]) -> bool:
         return False
 
 
-def process_auto_reassignment():
+def process_auto_reassignment(extra_victims: dict = None):
     """Helper to process reassignments in the background or during API calls."""
     try:
         victims = get_all("victims")
+        if extra_victims:
+            victims.update(extra_victims)
+            
         volunteers = get_all("volunteers")
         existing_matches = get_all("matches")
         
@@ -209,7 +212,7 @@ def create_victim() -> tuple:
             }), 201
 
         # If direct matching failed, try hijacking a volunteer via reassignment
-        reassignments = process_auto_reassignment()
+        reassignments = process_auto_reassignment(extra_victims={victim_id: victim})
         if reassignments and any(r["newVictimId"] == victim_id for r in reassignments):
              return jsonify({
                 "success": True,
