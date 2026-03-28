@@ -69,6 +69,7 @@ export default function VolunteerPage() {
   const previousVictimIdRef = useRef(null);
   const processingActionRef = useRef(false);
   const matchAcceptedRef = useRef(false);
+  const showModalRef = useRef(false);
 
   // Listen for Firebase auth changes
   useEffect(() => {
@@ -261,7 +262,7 @@ export default function VolunteerPage() {
                });
 
                if (myMatch.status === 'pending' && !matchAcceptedRef.current) {
-                 if (!showModal) {
+                 if (!showModalRef.current) {
                    try {
                      const ctx = new (window.AudioContext || window.webkitAudioContext)();
                      const osc = ctx.createOscillator();
@@ -269,13 +270,15 @@ export default function VolunteerPage() {
                      osc.connect(ctx.destination);
                      osc.start(); osc.stop(ctx.currentTime + 0.15);
                    } catch(e) { console.warn("Audio chime failed to play"); }
-                 }
-                 setShowModal(true);
-                 if ("Notification" in window && Notification.permission === "granted") {
-                   new Notification(victim.escalated ? `🚨 CRITICAL ESCALATION` : `🚨 Incoming Assignment`, {
-                     body: `${victim.name} needs urgent ${victim.need}. ETA: ${currentEtaStr}`,
-                     icon: '/favicon.ico'
-                   });
+                   
+                   setShowModal(true);
+                   showModalRef.current = true;
+                   if ("Notification" in window && Notification.permission === "granted") {
+                     new Notification(victim.escalated ? `🚨 CRITICAL ESCALATION` : `🚨 Incoming Assignment`, {
+                       body: `${victim.name} needs urgent ${victim.need}. ETA: ${currentEtaStr}`,
+                       icon: '/favicon.ico'
+                     });
+                   }
                  }
                } else if (myMatch.status === 'accepted') {
                  setMatchAccepted(true);
@@ -283,7 +286,7 @@ export default function VolunteerPage() {
                }
              }
            } else {
-             setMatchData(null); setVictimDetails(null); setShowModal(false); setMatchAccepted(false);
+             setMatchData(null); setVictimDetails(null); setShowModal(false); showModalRef.current = false; setMatchAccepted(false);
              matchAcceptedRef.current = false;
            }
         }
@@ -309,12 +312,14 @@ export default function VolunteerPage() {
       setMatchAccepted(true);
       matchAcceptedRef.current = true;
       setShowModal(false);
+      showModalRef.current = false;
     } catch (err) {
       console.error('Accept failed:', err);
       // Optimistically accept even if server is laggy
       setMatchAccepted(true);
       matchAcceptedRef.current = true;
       setShowModal(false);
+      showModalRef.current = false;
     } finally {
       processingActionRef.current = false;
     }
@@ -323,6 +328,7 @@ export default function VolunteerPage() {
   const handleDecline = async () => {
     processingActionRef.current = true;
     setShowModal(false);
+    showModalRef.current = false;
     if (!matchId) return;
     try {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? 'http://' + window.location.hostname + ':5000' : 'http://localhost:5000')}/api/matches/${matchId}`, {
