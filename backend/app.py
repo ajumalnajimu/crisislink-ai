@@ -123,6 +123,29 @@ def set_record(path: str, key: str, data: dict[str, Any]) -> bool:
         return False
 
 
+def process_auto_reassignment():
+    """Helper to process reassignments in the background or during API calls."""
+    try:
+        victims = get_all("victims")
+        volunteers = get_all("volunteers")
+        existing_matches = get_all("matches")
+        
+        reassignments = check_reassignment(victims, volunteers, existing_matches)
+        for r in reassignments:
+            update_record("victims", r["oldVictimId"], {"status": "waiting"})
+            update_record("victims", r["newVictimId"], {"status": "matched"})
+            update_record("matches", r["matchId"], {
+                "victimId": r["newVictimId"],
+                "score": r["newScore"],
+                "eta": r["eta"],
+                "decisionLog": r["decisionLog"],
+            })
+            print(f"[AUTO-REASSIGN] Rerouted {r['volunteerId']} to {r['newVictimId']}!")
+        return reassignments
+    except Exception as e:
+        print(f"[ERROR] Auto-reassign failed: {e}")
+        return []
+
 # ── API Routes ───────────────────────────────────────────────────────────────
 
 
@@ -181,6 +204,17 @@ def create_victim() -> tuple:
                 "matched": True,
                 "match": match,
                 "matchId": match_id,
+            }), 201
+
+        # If direct matching failed, try hijacking a volunteer via reassignment
+        reassignments = process_auto_reassignment()
+        if reassignments and any(r["newVictimId"] == victim_id for r in reassignments):
+             return jsonify({
+                "success": True,
+                "victimId": victim_id,
+                "matched": True,
+                "match": {}, # the client will pull the match dict on next poll
+                "matchId": "reassigned",
             }), 201
 
         return jsonify({
@@ -525,6 +559,9 @@ def escalate_victim() -> tuple:
             push_record("matches", match)
             update_record("victims", match["victimId"], {"status": "matched"})
             update_record("volunteers", match["volunteerId"], {"status": "assigned"})
+            
+        # Try hijacking assigned volunteers via automatic reassignment
+        process_auto_reassignment()
 
         return jsonify({"success": True, "message": "Emergency escalated!"}), 200
 

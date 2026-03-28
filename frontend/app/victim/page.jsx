@@ -79,7 +79,7 @@ export default function VictimPage() {
     if (savedId) {
       setVictimId(savedId);
       setSubmitted(true);
-      fetch(`http://localhost:5000/api/victim/${savedId}`)
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/victim/${savedId}`)
         .then(res => res.json())
         .then(data => {
           if (data.success && data.victim) {
@@ -132,7 +132,7 @@ export default function VictimPage() {
           setMyCoords({ lat: newLat, lng: newLng });
           setLocationStr(`${newLat.toFixed(6)}, ${newLng.toFixed(6)}`);
           
-          fetch('http://localhost:5000/api/location/update', {
+          fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/location/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ role: 'victim', id: victimId, lat: newLat, lng: newLng })
@@ -145,14 +145,14 @@ export default function VictimPage() {
 
     const pollMatches = async () => {
       try {
-        const vicRes = await fetch(`http://localhost:5000/api/victim/${victimId}`);
+        const vicRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/victim/${victimId}`);
         const vicData = await vicRes.json();
         if (vicData.success && vicData.victim && vicData.victim.status === 'rescued') {
             setMatchData({ isRescued: true });
             return;
         }
 
-        const res = await fetch('http://localhost:5000/api/matches');
+        const res = await fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/matches');
         const data = await res.json();
         
         if (data.success && data.matches) {
@@ -160,7 +160,7 @@ export default function VictimPage() {
            const myMatch = matchesArray.find(m => m.victimId === victimId);
            
            if (myMatch) {
-             const volRes = await fetch('http://localhost:5000/api/volunteers');
+             const volRes = await fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/volunteers');
              const volData = await volRes.json();
              const volunteer = volData.volunteers ? volData.volunteers[myMatch.volunteerId] : null;
 
@@ -217,7 +217,7 @@ export default function VictimPage() {
     if (!victimId || isEscalating) return;
     setIsEscalating(true);
     try {
-      await fetch('http://localhost:5000/api/victim/escalate', {
+      await fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/victim/escalate', {
          method: 'POST',
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({ victimId })
@@ -234,7 +234,7 @@ export default function VictimPage() {
   const handleCancelRequest = async () => {
     if (!victimId || confirm("Are you sure you want to cancel your rescue request?") !== true) return;
     try {
-      await fetch(`http://localhost:5000/api/victim/${victimId}/cancel`, { method: 'POST' });
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/victim/${victimId}/cancel`, { method: 'POST' });
       endSession();
     } catch (e) {
       console.error(e);
@@ -324,7 +324,7 @@ export default function VictimPage() {
         customMessage: "ONE-TAP SOS OVERRIDE ACTIVATED",
         escalated: true
       };
-      const res = await fetch('http://localhost:5000/api/victim', {
+      const res = await fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/victim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -384,7 +384,7 @@ export default function VictimPage() {
         customMessage, audioBase64
       };
 
-      const res = await fetch('http://localhost:5000/api/victim', {
+      const res = await fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/victim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

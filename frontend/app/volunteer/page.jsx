@@ -117,7 +117,7 @@ export default function VolunteerPage() {
     if (savedId) {
       setVolunteerId(savedId);
       setRegistered(true);
-      fetch(`http://localhost:5000/api/volunteer/${savedId}`)
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/volunteer/${savedId}`)
         .then(res => res.json())
         .then(data => {
           if (data.success && data.volunteer) {
@@ -172,7 +172,7 @@ export default function VolunteerPage() {
       }
       setMyCoords({ lat, lng });
 
-      const res = await fetch('http://localhost:5000/api/volunteer', {
+      const res = await fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/volunteer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: unitName, resource, lat, lng })
@@ -202,7 +202,7 @@ export default function VolunteerPage() {
           const newLat = pos.coords.latitude; const newLng = pos.coords.longitude;
           setMyCoords({ lat: newLat, lng: newLng });
           setLocationStr(`${newLat.toFixed(6)}, ${newLng.toFixed(6)}`);
-          fetch('http://localhost:5000/api/location/update', {
+          fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/location/update', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ role: 'volunteer', id: volunteerId, lat: newLat, lng: newLng })
           }).catch(() => {});
@@ -215,7 +215,7 @@ export default function VolunteerPage() {
       // Don't poll while user is actively accepting/declining
       if (processingActionRef.current) return;
       try {
-        const res = await fetch('http://localhost:5000/api/matches');
+        const res = await fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/matches');
         const data = await res.json();
         
         if (data.success && data.matches) {
@@ -226,7 +226,7 @@ export default function VolunteerPage() {
              const [mId, myMatch] = myMatchEntry;
              setMatchId(mId);
              
-             const vicRes = await fetch('http://localhost:5000/api/victims');
+             const vicRes = await fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/victims');
              const vicData = await vicRes.json();
              const victim = vicData.victims ? vicData.victims[myMatch.victimId] : null;
 
@@ -301,7 +301,7 @@ export default function VolunteerPage() {
   const handleAccept = async () => {
     processingActionRef.current = true;
     try {
-      const res = await fetch('http://localhost:5000/api/match/accept', {
+      const res = await fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/match/accept', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matchId, volunteerId })
       });
@@ -325,7 +325,7 @@ export default function VolunteerPage() {
     setShowModal(false);
     if (!matchId) return;
     try {
-      await fetch(`http://localhost:5000/api/matches/${matchId}`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/matches/${matchId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'declined' })
       });
       setMatchData(null); setVictimDetails(null);
@@ -336,7 +336,7 @@ export default function VolunteerPage() {
   const handleCompleteMission = async () => {
     if (!matchId) return;
     try {
-      await fetch(`http://localhost:5000/api/matches/${matchId}/complete`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/matches/${matchId}/complete`, {
         method: 'POST',
       });
       setMatchData(null);

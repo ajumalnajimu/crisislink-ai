@@ -126,6 +126,7 @@ function RouteLine({ from, to }) {
           opacity: 0.7,
           dashArray: '10, 15',
           lineCap: 'round',
+          className: 'animate-route'
         }}
       />
       <FitBounds points={[routeCoords[0], routeCoords[routeCoords.length - 1]]} />
@@ -201,6 +202,12 @@ export default function MapInner({ center = [12.9716, 77.5946], zoom = 13, marke
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes ping {
           75%, 100% { transform: scale(2); opacity: 0; }
+        }
+        .animate-route {
+          animation: flow 1s linear infinite;
+        }
+        @keyframes flow {
+          to { stroke-dashoffset: -25; }
         }
       `}} />
       <MapContainer 
