@@ -711,7 +711,7 @@ def background_timeout_worker() -> None:
         try:
             matches = get_all("matches")
             now = int(time.time() * 1000)
-            stale_cutoff = now - (120 * 1000)  # 120 seconds
+            stale_cutoff = now - (15 * 1000)  # 15 seconds aggressive timeout
             
             for m_id, match in matches.items():
                 if match.get("status") == "pending":
@@ -725,17 +725,30 @@ def background_timeout_worker() -> None:
                         except Exception:
                             pass
                             
+                        # Put victim back to waiting
                         if vic_id:
                             update_record("victims", vic_id, {"status": "waiting"})
+                        # Mark volunteer as OFFLINE so they don't get matched again
                         if vol_id:
-                            update_record("volunteers", vol_id, {"status": "available"})
+                            update_record("volunteers", vol_id, {"status": "offline"})
                         
-                        print(f"[BACKGROUND] Match {m_id} automatically timed out.")
+                        print(f"[BACKGROUND] Ghost volunteer {vol_id} timed out. Match {m_id} canceled.")
+                        
+                        # Instantly trigger reassignment for this victim
+                        victims = get_all("victims")
+                        volunteers = get_all("volunteers")
+                        if vic_id and vic_id in victims:
+                            new_match = find_best_match(victims[vic_id], vic_id, volunteers)
+                            if new_match:
+                                push_record("matches", new_match)
+                                update_record("victims", vic_id, {"status": "matched"})
+                                update_record("volunteers", new_match["volunteerId"], {"status": "assigned"})
+                                print(f"[BACKGROUND] Instantly rematched victim {vic_id} to {new_match['volunteerId']}")
                         
         except Exception as e:
             print(f"[BACKGROUND] Error in timeout worker: {e}")
             
-        time.sleep(15)
+        time.sleep(5)  # Check every 5 seconds
 
 import threading
 threading.Thread(target=background_timeout_worker, daemon=True).start()
