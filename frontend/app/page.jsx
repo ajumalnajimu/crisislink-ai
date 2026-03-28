@@ -1,6 +1,60 @@
+'use client';
+import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function LandingPage() {
+  const [sosSending, setSosSending] = useState(false);
+  const [sosSent, setSosSent] = useState(false);
+  const router = useRouter();
+
+  const handleSOS = async () => {
+    if (sosSending || sosSent) return;
+    setSosSending(true);
+
+    let lat = 12.9716, lng = 77.5946; // fallback coords
+    try {
+      if (navigator.geolocation) {
+        const pos = await new Promise((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000, enableHighAccuracy: true })
+        );
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      }
+    } catch {
+      // Use fallback coords silently — we'll still dispatch
+    }
+
+    try {
+      const res = await fetch('http://localhost:5000/api/victim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'SOS User',
+          need: 'sos',
+          urgency: 10,
+          lat, lng,
+          totalPersons: 1,
+          vulnerablePersons: {},
+          essentials: [],
+          situation: { trapped: true },
+          customMessage: 'SOS ACTIVATED FROM LANDING PAGE',
+          escalated: true
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem('crisislink_victimId', data.victimId);
+        setSosSent(true);
+        // Redirect to victim tracking after a brief confirmation moment
+        setTimeout(() => router.push('/victim'), 1500);
+      }
+    } catch {
+      setSosSending(false);
+      alert('Connection error. Please try again or call emergency services.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-transparent flex flex-col pt-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       
@@ -14,23 +68,43 @@ export default function LandingPage() {
            <h1 className="text-3xl md:text-5xl font-black text-slate-800 tracking-tighter mb-4 drop-shadow-sm">
              Crisis<span className="text-rose-600">Link</span> <span className="text-slate-400 font-bold">AI</span>
            </h1>
-           <p className="text-lg text-slate-500 font-medium">Intelligent real-time disaster coordination. If you are in immediate danger, use the SOS button below.</p>
+           <p className="text-lg text-slate-500 font-medium">Intelligent real-time disaster coordination. If you are in immediate danger, press SOS now.</p>
         </div>
 
-        {/* MASSIVE SOS BUTTON */}
+        {/* MASSIVE SOS BUTTON — instant dispatch, no redirect */}
         <div className="flex justify-center mb-24 relative animate-in zoom-in-75 fade-in duration-1000">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 md:w-80 md:h-80 bg-red-600 rounded-full blur-[80px] opacity-40 animate-pulse"></div>
           
-          <Link href="/victim" className="relative group flex items-center justify-center w-64 h-64 md:w-80 md:h-80 bg-gradient-to-br from-red-500 to-red-700 rounded-full shadow-[0_20px_60px_-15px_rgba(239,68,68,0.6)] hover:shadow-[0_20px_100px_-10px_rgba(239,68,68,0.8)] transition-all duration-500 hover:scale-[1.03] border-8 border-white active:scale-95">
-            <div className="absolute inset-1 bg-gradient-to-tr from-red-800 to-rose-500 rounded-full shadow-inner opacity-80 border-4 border-red-400/30 group-hover:opacity-100 transition-opacity"></div>
+          <button
+            onClick={handleSOS}
+            disabled={sosSending || sosSent}
+            className={`relative group flex items-center justify-center w-64 h-64 md:w-80 md:h-80 rounded-full border-8 border-white transition-all duration-500 active:scale-95 ${
+              sosSent
+                ? 'bg-gradient-to-br from-emerald-500 to-green-600 shadow-[0_20px_60px_-15px_rgba(16,185,129,0.7)]'
+                : sosSending
+                ? 'bg-gradient-to-br from-orange-500 to-red-600 shadow-[0_20px_60px_-15px_rgba(239,68,68,0.6)] animate-pulse'
+                : 'bg-gradient-to-br from-red-500 to-red-700 shadow-[0_20px_60px_-15px_rgba(239,68,68,0.6)] hover:shadow-[0_20px_100px_-10px_rgba(239,68,68,0.8)] hover:scale-[1.03]'
+            }`}
+          >
+            <div className={`absolute inset-1 rounded-full shadow-inner opacity-80 border-4 transition-opacity group-hover:opacity-100 ${sosSent ? 'bg-gradient-to-tr from-green-700 to-emerald-400 border-emerald-400/30' : 'bg-gradient-to-tr from-red-800 to-rose-500 border-red-400/30'}`}></div>
             <div className="relative z-10 flex flex-col items-center justify-center translate-y-2">
-              <span className="text-white text-[5rem] md:text-[6.5rem] font-black tracking-widest drop-shadow-[0_4px_10px_rgba(0,0,0,0.3)] mb-1 leading-none">SOS</span>
-              <span className="text-white text-xs md:text-sm font-bold uppercase tracking-[0.25em] bg-black/20 px-5 py-2 rounded-full backdrop-blur-sm border border-white/10">Request Rescue</span>
+              {sosSent ? (
+                <>
+                  <span className="text-white text-[3.5rem] md:text-[4rem] font-black tracking-widest drop-shadow-[0_4px_10px_rgba(0,0,0,0.3)] mb-1 leading-none">✓</span>
+                  <span className="text-white text-xs md:text-sm font-bold uppercase tracking-[0.2em] bg-black/20 px-4 py-2 rounded-full backdrop-blur-sm border border-white/10">Dispatched!</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-white text-[5rem] md:text-[6.5rem] font-black tracking-widest drop-shadow-[0_4px_10px_rgba(0,0,0,0.3)] mb-1 leading-none">SOS</span>
+                  <span className="text-white text-xs md:text-sm font-bold uppercase tracking-[0.25em] bg-black/20 px-5 py-2 rounded-full backdrop-blur-sm border border-white/10">
+                    {sosSending ? 'Locating...' : 'Request Rescue'}
+                  </span>
+                </>
+              )}
             </div>
-            
             {/* Ripple Effects */}
-            <div className="absolute inset-0 rounded-full border border-red-500/50 scale-100 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]"></div>
-          </Link>
+            {!sosSent && <div className="absolute inset-0 rounded-full border border-red-500/50 scale-100 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]"></div>}
+          </button>
         </div>
 
         <div className="mb-8 flex items-center justify-center gap-6 opacity-60">
@@ -44,7 +118,6 @@ export default function LandingPage() {
           <Link href="/victim" className="group block">
             <div className="glass-panel rounded-[3rem] p-8 hover:bg-white/80 transition-all duration-500 transform hover:-translate-y-3 h-full flex flex-col justify-between relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-bl-full blur-2xl -z-10 group-hover:scale-150 transition-transform duration-700"></div>
-              
               <div>
                 <div className="w-20 h-20 bg-gradient-to-br from-rose-100 to-white text-rose-600 rounded-3xl flex items-center justify-center mb-8 group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(225,29,72,0.3)] transition-all duration-500 border border-white">
                   <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -64,7 +137,6 @@ export default function LandingPage() {
           <Link href="/volunteer" className="group block">
             <div className="glass-panel rounded-[3rem] p-8 hover:bg-white/80 transition-all duration-500 transform hover:-translate-y-3 h-full flex flex-col justify-between relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-bl-full blur-2xl -z-10 group-hover:scale-150 transition-transform duration-700"></div>
-              
               <div>
                 <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-white text-blue-600 rounded-3xl flex items-center justify-center mb-8 group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(37,99,235,0.3)] transition-all duration-500 border border-white">
                   <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -84,7 +156,6 @@ export default function LandingPage() {
           <Link href="/authority" className="group block">
             <div className="bg-slate-900/80 backdrop-blur-2xl rounded-[3rem] p-8 shadow-2xl border border-slate-700 hover:border-emerald-500/50 hover:shadow-[0_8px_40px_rgba(16,185,129,0.3)] transition-all duration-500 transform hover:-translate-y-3 h-full flex flex-col justify-between relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 rounded-bl-full blur-2xl -z-0 group-hover:scale-150 transition-transform duration-700"></div>
-              
               <div className="relative z-10">
                 <div className="w-20 h-20 bg-emerald-500/10 text-emerald-400 rounded-3xl flex items-center justify-center mb-8 group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] transition-all duration-500 border border-emerald-500/30">
                   <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">

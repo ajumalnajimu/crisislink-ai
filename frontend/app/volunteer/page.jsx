@@ -1,5 +1,8 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { auth } from '@/lib/firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
 import VolunteerCard from '@/components/VolunteerCard';
 import Map from '@/components/Map';
 import Link from 'next/link';
@@ -30,6 +33,17 @@ function calcDynamicETA(lat1, lon1, lat2, lon2, situation, baseSpeedKmh = 40.0) 
 }
 
 export default function VolunteerPage() {
+  const router = useRouter();
+  // Auth state
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isSignup, setIsSignup] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+
+  // Registration / operational state
   const [registered, setRegistered] = useState(false);
   const [reassigned, setReassigned] = useState(false);
   const [volunteerId, setVolunteerId] = useState(null);
@@ -46,9 +60,57 @@ export default function VolunteerPage() {
   const [victimDetails, setVictimDetails] = useState(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [pickerCoords, setPickerCoords] = useState(null);
 
   const [activeSession, setActiveSession] = useState(true);
+
+  // Refs to avoid stale closures in polling
+  const previousVictimIdRef = useRef(null);
+  const processingActionRef = useRef(false);
+  const matchAcceptedRef = useRef(false);
+
+  // Listen for Firebase auth changes
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthSubmitting(true);
+    try {
+      if (isSignup) {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err) {
+      const msgs = {
+        'auth/invalid-email': 'Invalid email address.',
+        'auth/user-not-found': 'No account found.',
+        'auth/wrong-password': 'Incorrect password.',
+        'auth/email-already-in-use': 'Account already exists.',
+        'auth/weak-password': 'Password must be at least 6 characters.',
+        'auth/invalid-credential': 'Invalid email or password.',
+      };
+      setAuthError(msgs[err.code] || 'Authentication failed.');
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleLogout = () => {
+    signOut(auth);
+    setRegistered(false);
+    setVolunteerId(null);
+    localStorage.removeItem('crisislink_volunteerId');
+    router.push('/');
+  };
 
   useEffect(() => {
     const savedId = localStorage.getItem('crisislink_volunteerId');
@@ -64,9 +126,10 @@ export default function VolunteerPage() {
             setResource(v.resource);
             setLocationStr(`${v.lat}, ${v.lng}`);
             setMyCoords({ lat: v.lat, lng: v.lng });
-            if (v.status === 'en_route') setMatchAccepted(true);
+            if (v.status === 'en_route') { setMatchAccepted(true); matchAcceptedRef.current = true; }
           }
         })
+        .catch(() => { /* Backend unreachable — clear stale session */ localStorage.removeItem('crisislink_volunteerId'); setRegistered(false); setVolunteerId(null); })
         .finally(() => setActiveSession(false));
     } else {
       setActiveSession(false);
@@ -114,6 +177,10 @@ export default function VolunteerPage() {
     finally { setIsGeocoding(false); }
   };
 
+  // Sync myCoords to a ref for the polling loop to use without resetting the loop
+  const myCoordsRef = useRef(myCoords);
+  useEffect(() => { myCoordsRef.current = myCoords; }, [myCoords]);
+
   useEffect(() => {
     if (!registered || !volunteerId) return;
     let previousVictimId = null;
@@ -135,6 +202,8 @@ export default function VolunteerPage() {
     }
 
     const pollMatches = async () => {
+      // Don't poll while user is actively accepting/declining
+      if (processingActionRef.current) return;
       try {
         const res = await fetch('http://localhost:5000/api/matches');
         const data = await res.json();
@@ -155,13 +224,15 @@ export default function VolunteerPage() {
                if (previousVictimId && previousVictimId !== myMatch.victimId) {
                  setReassigned(true);
                  setMatchAccepted(false);
+                 matchAcceptedRef.current = false;
                  setTimeout(() => setReassigned(false), 8000);
                }
                previousVictimId = myMatch.victimId;
+               previousVictimIdRef.current = myMatch.victimId;
 
                let currentEtaStr = `${myMatch.eta || '?'} min`;
-               if (myCoords && victim.lat) {
-                  currentEtaStr = `${calcDynamicETA(myCoords.lat, myCoords.lng, victim.lat, victim.lng, victim.situation)} min`;
+               if (myCoordsRef.current && victim.lat) {
+                  currentEtaStr = `${calcDynamicETA(myCoordsRef.current.lat, myCoordsRef.current.lng, victim.lat, victim.lng, victim.situation)} min`;
                }
 
                const details = {
@@ -179,9 +250,9 @@ export default function VolunteerPage() {
                  score: myMatch.score, lat: victim.lat, lng: victim.lng, status: myMatch.status,
                });
 
-               if (myMatch.status === 'pending' && (!matchAccepted || myMatch.victimId !== previousVictimId)) {
+               if (myMatch.status === 'pending' && !matchAcceptedRef.current) {
                  setShowModal(true);
-                 if ("Notification" in window && Notification.permission === "granted" && myMatch.victimId !== previousVictimId) {
+                 if ("Notification" in window && Notification.permission === "granted") {
                    new Notification(victim.escalated ? `🚨 CRITICAL ESCALATION` : `🚨 Incoming Assignment`, {
                      body: `${victim.name} needs urgent ${victim.need}. ETA: ${currentEtaStr}`,
                      icon: '/favicon.ico'
@@ -189,10 +260,12 @@ export default function VolunteerPage() {
                  }
                } else if (myMatch.status === 'accepted') {
                  setMatchAccepted(true);
+                 matchAcceptedRef.current = true;
                }
              }
            } else {
              setMatchData(null); setVictimDetails(null); setShowModal(false); setMatchAccepted(false);
+             matchAcceptedRef.current = false;
            }
         }
       } catch (err) {}
@@ -204,26 +277,51 @@ export default function VolunteerPage() {
       clearInterval(interval);
       if (watchId !== undefined && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
     };
-  }, [registered, volunteerId, matchAccepted, myCoords]);
+  }, [registered, volunteerId]); // removed myCoords from deps to stop infinite resets
 
   const handleAccept = async () => {
+    processingActionRef.current = true;
     try {
-      await fetch('http://localhost:5000/api/match/accept', {
+      const res = await fetch('http://localhost:5000/api/match/accept', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matchId, volunteerId })
       });
-      setMatchAccepted(true); setShowModal(false);
-    } catch (err) {}
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      setMatchAccepted(true);
+      matchAcceptedRef.current = true;
+      setShowModal(false);
+    } catch (err) {
+      console.error('Accept failed:', err);
+      // Optimistically accept even if server is laggy
+      setMatchAccepted(true);
+      matchAcceptedRef.current = true;
+      setShowModal(false);
+    } finally {
+      processingActionRef.current = false;
+    }
   };
 
   const handleDecline = async () => {
+    processingActionRef.current = true;
+    // Immediately dismiss the modal
+    setShowModal(false);
     try {
-      await fetch('http://localhost:5000/api/match/cancel', {
+      const res = await fetch('http://localhost:5000/api/match/cancel', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matchId, volunteerId, victimId: victimDetails?.id })
       });
-      setShowModal(false); setMatchData(null); setMatchId(null); setVictimDetails(null); setMatchAccepted(false);
-    } catch (err) {}
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+    } catch (err) {
+      console.error('Decline failed:', err);
+    } finally {
+      setMatchData(null);
+      setMatchId(null);
+      setVictimDetails(null);
+      setMatchAccepted(false);
+      matchAcceptedRef.current = false;
+      previousVictimIdRef.current = null;
+      processingActionRef.current = false;
+    }
   };
 
   const endShift = () => {
@@ -233,51 +331,156 @@ export default function VolunteerPage() {
 
   const situationLabels = { trapped: '🔒 Trapped', waterRising: '🌊 Water Rising', fireNearby: '🔥 Fire Nearby', buildingCollapse: '🏚️ Building Risk' };
 
-  if (activeSession) return <div className="min-h-screen flex items-center justify-center font-bold text-slate-500">Restoring Check-In...</div>;
+  if (activeSession || authLoading) return <div className="min-h-screen flex items-center justify-center font-bold text-slate-500">{authLoading ? 'Verifying...' : 'Restoring Check-In...'}</div>;
 
-  if (!registered) {
+  // Step 1: Firebase Auth Gate
+  if (!firebaseUser) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#fafafa] relative overflow-hidden text-slate-800 font-sans">
-        <div className="w-full max-w-[350px] bg-white border border-slate-300 flex flex-col pt-12 pb-6 px-10 relative z-10">
-          <div className="flex justify-center mb-8">
-            <h1 className="text-[2.2rem] font-black text-slate-800 tracking-tight text-center leading-[1.1]">
-              CrisisLink<br/><span className="text-blue-600 font-sans tracking-wide font-black text-xl">VOLUNTEER</span>
+      <div className="relative min-h-screen bg-slate-50 overflow-hidden text-slate-600 font-sans">
+        {/* BLOB - solid color only */}
+        <svg viewBox="0 0 566 840" preserveAspectRatio="xMaxYMid slice" className="absolute top-0 right-0 h-full w-[50%] z-0 hidden lg:block pointer-events-none">
+          <path d="M342.407 73.6315C388.53 56.4007 394.378 17.3643 391.538 0H566V840H0C14.5385 834.991 100.266 804.436 77.2046 707.263C49.6393 591.11 115.306 518.927 176.468 488.873C363.385 397.026 156.98 302.824 167.945 179.32C173.46 117.209 284.755 95.1699 342.407 73.6315Z" fill="#2563eb"/>
+        </svg>
+        <div className="relative z-10 min-h-screen flex items-center justify-center lg:justify-start">
+          <div className="w-full max-w-[420px] px-8 lg:px-0 lg:ml-[10%] animate-in fade-in slide-in-from-left-8 duration-700">
+            <Link href="/" className="inline-flex mb-12 text-slate-400 hover:text-blue-500 transition-colors">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            </Link>
+            <h1 className="text-4xl lg:text-[2.5rem] font-black text-slate-900 text-center lg:text-left mb-3 tracking-tight leading-tight">
+              {isSignup ? 'Join as' : 'Welcome,'}
             </h1>
-          </div>
-          
-          <form onSubmit={handleRegister} className="flex flex-col gap-1.5 mb-4 relative z-10">
-            <div className="relative mb-2">
-              <input type="text" value={unitName} onChange={e => setUnitName(e.target.value)} required placeholder="Call Sign / Unit Name" className="w-full text-xs px-2 pt-2.5 pb-2 bg-[#fafafa] border border-slate-300 rounded-[3px] focus:outline-none focus:border-slate-400 placeholder:text-slate-500 font-regular" />
-            </div>
-            <div className="relative mb-2">
-              <select required value={resource} onChange={e => setResource(e.target.value)} className="w-full text-xs px-2 pt-2.5 pb-2 bg-[#fafafa] border border-slate-300 rounded-[3px] focus:outline-none focus:border-slate-400 text-slate-700 font-regular appearance-none">
-                <option value="medical">Medical Kit & First Aid</option>
-                <option value="rescue">Off-road Vehicle / Boat</option>
-                <option value="shelter">Temporary Shelter / Tents</option>
-                <option value="food">Water & Food Supplies</option>
-              </select>
-            </div>
-            <div className="relative mb-2 flex space-x-1">
-               <input type="text" value={locationStr} onChange={e => setLocationStr(e.target.value)} required placeholder="Location GPS" className="w-full text-xs px-2 pt-2.5 pb-2 bg-[#fafafa] border border-slate-300 rounded-[3px] focus:outline-none focus:border-slate-400 placeholder:text-slate-500 font-regular" />
-               <button type="button" onClick={() => setShowMapPicker(true)} className="px-3 bg-[#fafafa] border border-slate-300 rounded-[3px] hover:bg-slate-100 flex items-center justify-center shrink-0">
-                  <span className="text-lg">📍</span>
-               </button>
-               <button type="button" onClick={() => navigator.geolocation.getCurrentPosition(pos => setLocationStr(`${pos.coords.latitude}, ${pos.coords.longitude}`))} className="px-3 bg-[#fafafa] border border-slate-300 rounded-[3px] hover:bg-slate-100 flex items-center justify-center shrink-0">
-                  <span className="text-lg">🎯</span>
-               </button>
-            </div>
-            <button type="submit" disabled={isGeocoding} className="mt-3 w-full py-1.5 font-bold text-[14px] text-white bg-[#0095f6] hover:bg-[#1877f2] disabled:opacity-70 disabled:hover:bg-[#0095f6] rounded-[8px] transition-colors">
-              {isGeocoding ? 'Locking...' : 'Go Online'}
-            </button>
-          </form>
-
-          <div className="text-center mt-2">
-            <button className="text-xs text-[#00376b] hover:text-slate-500 transition-colors">Get help checking in</button>
+            <p className="text-3xl font-black text-blue-600 text-center lg:text-left mb-10">
+              {isSignup ? 'Volunteer' : 'Volunteer'}
+            </p>
+            <form onSubmit={handleAuth} className="space-y-5">
+              <div className="relative flex items-center bg-white rounded-3xl p-1 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 transition-all group">
+                <input type="email" id="vol-auth-email" placeholder=" " value={email} onChange={e => setEmail(e.target.value)} required
+                  className="peer w-full bg-transparent px-5 pt-8 pb-3 text-[15px] font-semibold text-slate-800 placeholder-transparent focus:outline-none" />
+                <label htmlFor="vol-auth-email" className="absolute left-5 top-5 text-[15px] font-bold text-slate-400 peer-placeholder-shown:top-5 peer-focus:top-3 peer-focus:text-xs peer-focus:text-blue-500 transition-all pointer-events-none">Email Address</label>
+                <svg className="w-6 h-6 absolute right-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" /></svg>
+              </div>
+              <div className="relative flex items-center bg-white rounded-3xl p-1 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 transition-all group">
+                <input type={showPassword ? 'text' : 'password'} id="vol-auth-pass" placeholder=" " value={password} onChange={e => setPassword(e.target.value)} required minLength={6}
+                  className="peer w-full bg-transparent px-5 pt-8 pb-3 text-[15px] font-semibold text-slate-800 placeholder-transparent focus:outline-none" />
+                <label htmlFor="vol-auth-pass" className="absolute left-5 top-5 text-[15px] font-bold text-slate-400 peer-placeholder-shown:top-5 peer-focus:top-3 peer-focus:text-xs peer-focus:text-blue-500 transition-all pointer-events-none">Password</label>
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-5 text-slate-400 hover:text-blue-500 focus:outline-none transition-colors">
+                  {showPassword ? (
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>
+                  ) : (
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  )}
+                </button>
+              </div>
+              {authError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm font-semibold px-4 py-3 rounded-2xl">{authError}</div>}
+              <button type="submit" disabled={authSubmitting} className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white font-black text-lg tracking-wide rounded-full transition-all shadow-[0_8px_24px_rgba(37,99,235,0.3)] hover:shadow-[0_12px_32px_rgba(37,99,235,0.5)] disabled:opacity-60 mt-2">
+                {authSubmitting ? 'Please wait...' : (isSignup ? 'Create Account' : 'Sign In')}
+              </button>
+              <p className="text-center text-sm font-bold text-slate-500 pt-4">
+                {isSignup ? 'Already registered?' : 'New volunteer?'}{' '}
+                <button type="button" onClick={() => { setIsSignup(!isSignup); setAuthError(''); }} className="text-blue-600 hover:text-blue-700 transition-colors bg-transparent">
+                  {isSignup ? 'Log In' : 'Create Account'}
+                </button>
+              </p>
+            </form>
           </div>
         </div>
+      </div>
+    );
+  }
 
-        <div className="w-full max-w-[350px] mt-2.5 py-5 bg-white border border-slate-300 flex flex-col items-center justify-center relative z-10 text-[14px]">
-          <p className="text-slate-800 m-0">Not an organization? <Link href="/" className="text-[#0095f6] font-bold cursor-pointer">Return Home</Link></p>
+  // Step 2: Operational Details (shown after auth, before backend registration)
+  if (!registered) {
+    return (
+      <div className="relative min-h-screen bg-slate-50 overflow-hidden text-slate-600 font-sans">
+        
+        {/* BLOB - solid color only */}
+        <svg viewBox="0 0 566 840" preserveAspectRatio="xMaxYMid slice" className="absolute top-0 right-0 h-full w-[50%] z-0 hidden lg:block pointer-events-none">
+          <path d="M342.407 73.6315C388.53 56.4007 394.378 17.3643 391.538 0H566V840H0C14.5385 834.991 100.266 804.436 77.2046 707.263C49.6393 591.11 115.306 518.927 176.468 488.873C363.385 397.026 156.98 302.824 167.945 179.32C173.46 117.209 284.755 95.1699 342.407 73.6315Z" fill="#2563eb"/>
+        </svg>
+
+        {/* Content - Centered vertically and horizontally */}
+        <div className="relative z-10 min-h-screen flex items-center justify-center lg:justify-start">
+          <div className="w-full max-w-[420px] px-8 lg:px-0 lg:ml-[10%] animate-in fade-in slide-in-from-left-8 duration-700">
+            <Link href="/" className="inline-flex mb-12 text-slate-400 hover:text-blue-500 transition-colors">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            </Link>
+            
+            <h1 className="text-4xl lg:text-[2.5rem] font-black text-slate-900 text-center lg:text-left mb-12 tracking-tight leading-tight">
+              Volunteer <br/>
+              <span className="text-blue-600">Operations Hub</span>
+            </h1>
+            
+            <form onSubmit={handleRegister} className="space-y-6">
+              
+              {/* CALL SIGN */}
+              <div className="relative flex items-center bg-white rounded-3xl p-1 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 transition-all group">
+                <input 
+                    type="text" 
+                    id="vol-callsign"
+                    placeholder=" " 
+                    value={unitName}
+                    onChange={(e) => setUnitName(e.target.value)}
+                    required
+                    className="peer w-full bg-transparent px-5 pt-8 pb-3 text-[15px] font-semibold text-slate-800 placeholder-transparent focus:outline-none" 
+                />
+                <label htmlFor="vol-callsign" className="absolute left-5 top-5 text-[15px] font-bold text-slate-400 peer-placeholder-shown:top-5 peer-focus:top-3 peer-focus:text-xs peer-focus:text-blue-500 transition-all pointer-events-none">Call Sign / Unit Name</label>
+                <svg className="w-6 h-6 absolute right-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              </div>
+
+              {/* RESOURCE SELECT */}
+              <div className="relative flex items-center bg-white rounded-3xl p-1 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 transition-all group">
+                <select 
+                  id="vol-resource"
+                  required 
+                  value={resource} 
+                  onChange={e => setResource(e.target.value)} 
+                  className="w-full bg-transparent px-4 pt-8 pb-3 text-[15px] font-semibold text-slate-800 focus:outline-none appearance-none cursor-pointer"
+                >
+                  <option value="medical">Medical Kit & First Aid</option>
+                  <option value="rescue">Off-road Vehicle / Boat</option>
+                  <option value="shelter">Temporary Shelter / Tents</option>
+                  <option value="food">Water & Food Supplies</option>
+                </select>
+                <label htmlFor="vol-resource" className="absolute left-5 top-3 text-xs font-bold text-slate-400 group-focus-within:text-blue-500 transition-all pointer-events-none">Resource Capability</label>
+                <svg className="w-6 h-6 absolute right-5 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+              </div>
+
+              {/* LOCATION INPUT */}
+              <div className="relative flex items-center bg-white rounded-3xl p-1 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 transition-all group pr-24">
+                <input 
+                    type="text" 
+                    id="vol-location"
+                    placeholder=" " 
+                    value={locationStr}
+                    onChange={(e) => setLocationStr(e.target.value)}
+                    required
+                    className="peer w-full bg-transparent px-5 pt-8 pb-3 text-[15px] font-semibold text-slate-800 placeholder-transparent focus:outline-none" 
+                />
+                <label htmlFor="vol-location" className="absolute left-5 top-5 text-[15px] font-bold text-slate-400 peer-placeholder-shown:top-5 peer-focus:top-3 peer-focus:text-xs peer-focus:text-blue-500 transition-all pointer-events-none">Location GPS</label>
+                
+                <div className="absolute right-2 flex space-x-1">
+                   <button type="button" onClick={() => setShowMapPicker(true)} className="w-10 h-10 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200 hover:text-blue-500 transition-colors flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                   </button>
+                   <button type="button" onClick={() => {
+                     if (navigator.geolocation) {
+                       navigator.geolocation.getCurrentPosition(
+                         pos => setLocationStr(`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`),
+                         () => alert('Could not get GPS. Please enter manually.'),
+                         { timeout: 5000, enableHighAccuracy: false, maximumAge: 60000 }
+                       );
+                     }
+                   }} className="w-10 h-10 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200 hover:text-blue-500 transition-colors flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" /></svg>
+                   </button>
+                </div>
+              </div>
+
+              <button type="submit" disabled={isGeocoding} className="w-full py-5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-black text-lg tracking-wide rounded-full transition-all shadow-[0_8px_24px_rgba(37,99,235,0.3)] hover:shadow-[0_12px_32px_rgba(37,99,235,0.5)] flex items-center justify-center disabled:opacity-50 disabled:shadow-none mt-4">
+                {isGeocoding ? 'Locking Coordinates...' : 'Go Online'}
+              </button>
+            </form>
+          </div>
         </div>
 
         {/* Map Picker Modal */}
@@ -323,11 +526,11 @@ export default function VolunteerPage() {
           </div>
           {registered && (
             <div className="flex items-center space-x-3">
-              <button onClick={endShift} className={`px-4 py-2 font-bold rounded-xl text-sm transition-colors border backdrop-blur-sm ${isEscalated ? 'bg-red-900/50 text-red-100 hover:bg-red-800 border-red-500/30' : 'bg-white/40 text-slate-600 hover:bg-white/60 border-slate-300 shadow-sm'}`}>
+              <button onClick={handleLogout} className={`px-4 py-2 font-bold rounded-xl text-sm transition-colors border backdrop-blur-sm ${isEscalated ? 'bg-red-900/50 text-red-100 hover:bg-red-800 border-red-500/30' : 'bg-white/40 text-slate-600 hover:bg-white/60 border-slate-300 shadow-sm'}`}>
                 Switch Account
               </button>
-              <button onClick={endShift} className={`px-5 py-2 font-bold rounded-xl text-sm transition-colors border shadow-sm ${isEscalated ? 'bg-red-600/90 text-white hover:bg-red-500 border-red-500' : 'bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 border-rose-500/20'}`}>
-                End Shift
+              <button onClick={() => { localStorage.removeItem('crisislink_volunteerId'); setRegistered(false); setVolunteerId(null); setMatchData(null); setVictimDetails(null); setMatchAccepted(false); matchAcceptedRef.current = false; }} className={`px-5 py-2 font-bold rounded-xl text-sm transition-colors border shadow-sm ${isEscalated ? 'bg-red-600/90 text-white hover:bg-red-500 border-red-500' : 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/20'}`}>
+                Change Resource
               </button>
             </div>
           )}
@@ -350,6 +553,23 @@ export default function VolunteerPage() {
           {/* Left Column */}
           <div className="xl:col-span-1 space-y-8">
             <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-500">
+              {/* User Info Panel */}
+              <div className={`p-5 rounded-2xl border backdrop-blur-xl ${isEscalated ? 'bg-red-950/50 border-red-800/50' : 'glass-panel border-white/40'}`}>
+                <div className="flex items-center space-x-4 mb-3">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${isEscalated ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'}`}>
+                    {unitName ? unitName.charAt(0).toUpperCase() : 'V'}
+                  </div>
+                  <div>
+                    <h3 className={`font-black text-lg ${isEscalated ? 'text-white' : 'text-slate-900'}`}>{unitName || 'Volunteer'}</h3>
+                    <p className={`text-xs font-bold uppercase tracking-wider ${isEscalated ? 'text-red-300' : 'text-slate-500'}`}>{firebaseUser?.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${isEscalated ? 'bg-red-900 text-red-100' : 'bg-blue-100 text-blue-700'}`}>{resource}</span>
+                  <span className={`px-3 py-1 rounded-lg text-xs font-bold ${isEscalated ? 'bg-red-900 text-red-200' : 'bg-slate-100 text-slate-600'}`}>📍 {locationStr || 'GPS Active'}</span>
+                </div>
+              </div>
+
               <VolunteerCard 
                 volunteer={matchData ? { ...matchData, name: unitName, resource } : { name: unitName, resource, matchedVictim: 'Waiting Match', distance: 'N/A', need: resource }} 
               />

@@ -429,28 +429,7 @@ export default function VictimPage() {
             <div className="glass-panel p-6 md:p-8 rounded-[3rem] relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400"></div>
                 
-                {/* Instant SOS Bypass */}
-                <div className="mb-10 pb-10 border-b border-slate-200/50">
-                  <h2 className="text-xl font-black mb-4 text-rose-600 tracking-tight uppercase drop-shadow-sm">Emergency Override</h2>
-                  <p className="text-sm font-medium text-slate-600 mb-6 leading-relaxed">If you are in immediate danger and cannot safely fill out the form, press this button to dispatch the closest available response unit directly to your hardware GPS location.</p>
-                  <button 
-                    onClick={handleSOS} 
-                    type="button" 
-                    disabled={isGeocoding}
-                    className="w-full py-6 relative group overflow-hidden bg-gradient-to-b from-rose-500 to-red-600 rounded-3xl font-black text-2xl uppercase tracking-widest shadow-[0_10px_40px_rgba(225,29,72,0.4)] border border-white/20 transition-all hover:shadow-[0_10px_50px_rgba(225,29,72,0.6)] active:scale-95 flex items-center justify-center text-white"
-                  >
-                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
-                    <span className="relative z-10 flex items-center">
-                       <span className="relative flex h-4 w-4 mr-4">
-                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                         <span className="relative inline-flex rounded-full h-4 w-4 bg-white shadow-[0_0_10px_white]"></span>
-                       </span>
-                       {isGeocoding ? 'Locating via Satellite...' : 'ONE-TAP SOS'}
-                    </span>
-                  </button>
-                </div>
-                
-                <h2 className="text-2xl font-black mb-6 text-slate-800 tracking-tight">Standard Request</h2>
+                <h2 className="text-2xl font-black mb-6 text-slate-800 tracking-tight">Request Rescue</h2>
                 
                 <form onSubmit={handleSubmit} className="space-y-6">
                   

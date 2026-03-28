@@ -1,5 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { auth } from '@/lib/firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import AlertBanner from '@/components/AlertBanner';
 import AIBriefing from '@/components/AIBriefing';
 import Map from '@/components/Map';
@@ -19,8 +21,49 @@ export default function AuthorityPage() {
   const [geoTrigger, setGeoTrigger] = useState(0);
   const [flyToTarget, setFlyToTarget] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [username, setUsername] = useState('');
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isSignup, setIsSignup] = useState(false);
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Firebase auth state listener
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthSubmitting(true);
+    try {
+      if (isSignup) {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err) {
+      const msgs = {
+        'auth/invalid-email': 'Invalid email address.',
+        'auth/user-not-found': 'No account found with this email.',
+        'auth/wrong-password': 'Incorrect password.',
+        'auth/email-already-in-use': 'An account with this email already exists.',
+        'auth/weak-password': 'Password must be at least 6 characters.',
+        'auth/invalid-credential': 'Invalid email or password.',
+      };
+      setAuthError(msgs[err.code] || 'Authentication failed. Please try again.');
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleLogout = () => signOut(auth);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -127,63 +170,80 @@ export default function AuthorityPage() {
     groupedCases[region].push(m);
   });
 
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50 font-bold text-slate-400 text-sm">Verifying credentials...</div>;
+  }
+
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#fafafa] relative overflow-hidden text-slate-800">
-        <div className="w-full max-w-[350px] bg-white border border-slate-300 flex flex-col pt-12 pb-6 px-10 relative z-10">
-          <div className="flex justify-center mb-8">
-            <h1 className="text-[2.2rem] font-black text-slate-800 tracking-tight text-center leading-[1.1]">
-              CrisisLink<br/><span className="text-emerald-500 font-sans tracking-wide font-black text-xl">COMMAND</span>
+      <div className="relative min-h-screen bg-slate-50 overflow-hidden text-slate-600 font-sans">
+        
+        {/* BLOB - Desktop Only, solid color only */}
+        <svg viewBox="0 0 566 840" preserveAspectRatio="xMaxYMid slice" className="absolute top-0 right-0 h-full w-[50%] z-0 hidden lg:block pointer-events-none">
+          <path d="M342.407 73.6315C388.53 56.4007 394.378 17.3643 391.538 0H566V840H0C14.5385 834.991 100.266 804.436 77.2046 707.263C49.6393 591.11 115.306 518.927 176.468 488.873C363.385 397.026 156.98 302.824 167.945 179.32C173.46 117.209 284.755 95.1699 342.407 73.6315Z" fill="#1e293b"/>
+        </svg>
+
+        {/* Content */}
+        <div className="relative z-10 min-h-screen flex items-center justify-center lg:justify-start">
+          <div className="w-full max-w-[420px] px-8 lg:px-0 lg:ml-[10%] animate-in fade-in slide-in-from-left-8 duration-700">
+            <Link href="/" className="inline-flex mb-12 text-slate-400 hover:text-emerald-500 transition-colors">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            </Link>
+            
+            <h1 className="text-4xl lg:text-[2.5rem] font-black text-slate-900 text-center lg:text-left mb-3 tracking-tight leading-tight">
+              {isSignup ? 'Create Account' : 'Welcome Back'}
             </h1>
-          </div>
-          
-          <form className="flex flex-col gap-1.5 mb-4" onSubmit={(e) => { e.preventDefault(); setIsAuthenticated(true); }}>
-            <div className="relative mb-2">
-              <input 
-                type="text" 
-                placeholder="Phone number, username, or email" 
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                className="w-full text-xs px-2 pt-2.5 pb-2 bg-[#fafafa] border border-slate-300 rounded-[3px] focus:outline-none focus:border-slate-400 placeholder:text-slate-500 font-regular" 
-              />
-            </div>
-            <div className="relative mb-2">
-              <input 
-                type="password" 
-                placeholder="Password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full text-xs px-2 pt-2.5 pb-2 bg-[#fafafa] border border-slate-300 rounded-[3px] focus:outline-none focus:border-slate-400 placeholder:text-slate-500 font-regular" 
-              />
-            </div>
-            <button 
-              type="submit" 
-              disabled={!username || password.length < 6}
-              className="mt-3 w-full py-1.5 font-bold text-[14px] text-white bg-[#0095f6] hover:bg-[#1877f2] disabled:opacity-70 disabled:hover:bg-[#0095f6] rounded-[8px] transition-colors"
-            >
-              Log in
-            </button>
-          </form>
+            <p className="text-slate-500 font-medium text-center lg:text-left mb-10">
+              {isSignup ? 'Register your Command authority access.' : 'Sign in to the Command Center.'}
+            </p>
+            
+            <form onSubmit={handleAuth} className="space-y-5">
+              
+              <div className="relative flex items-center bg-white rounded-3xl p-1 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500 transition-all group">
+                <input 
+                    type="email"
+                    id="auth-email"
+                    placeholder=" "
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="peer w-full bg-transparent px-5 pt-8 pb-3 text-[15px] font-semibold text-slate-800 placeholder-transparent focus:outline-none" 
+                />
+                <label htmlFor="auth-email" className="absolute left-5 top-5 text-[15px] font-bold text-slate-400 peer-placeholder-shown:top-5 peer-focus:top-3 peer-focus:text-xs peer-focus:text-emerald-500 transition-all pointer-events-none">Email Address</label>
+                <svg className="w-6 h-6 absolute right-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" /></svg>
+              </div>
 
-          <div className="flex items-center gap-4 my-3 mb-6">
-            <div className="flex-1 h-px bg-slate-300"></div>
-            <span className="text-[13px] font-bold text-slate-400 uppercase">or</span>
-            <div className="flex-1 h-px bg-slate-300"></div>
-          </div>
+              <div className="relative flex items-center bg-white rounded-3xl p-1 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500 transition-all group">
+                <input type={showPassword ? 'text' : 'password'} id="auth-pass" placeholder=" " value={password} onChange={e => setPassword(e.target.value)} required minLength={6}
+                       className="peer w-full bg-transparent px-5 pt-8 pb-3 text-[15px] font-semibold text-slate-800 placeholder-transparent focus:outline-none" />
+                <label htmlFor="auth-pass" className="absolute left-5 top-5 text-[15px] font-bold text-slate-400 peer-placeholder-shown:top-5 peer-focus:top-3 peer-focus:text-xs peer-focus:text-emerald-500 transition-all pointer-events-none">Password</label>
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-5 text-slate-400 hover:text-emerald-500 focus:outline-none transition-colors">
+                  {showPassword ? (
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>
+                  ) : (
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  )}
+                </button>
+              </div>
 
-          <div className="text-center">
-            <button className="flex items-center justify-center gap-2 w-full text-[14px] font-bold text-[#385185] hover:text-[#283e6b] transition-colors mb-3">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-              Log in with Secure ID
-            </button>
-            <button className="text-xs text-[#00376b] hover:text-slate-500 transition-colors">Forgot password?</button>
-          </div>
-        </div>
+              {authError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm font-semibold px-4 py-3 rounded-2xl">
+                  {authError}
+                </div>
+              )}
 
-        <div className="w-full max-w-[350px] mt-2.5 py-5 bg-white border border-slate-300 flex flex-col items-center justify-center relative z-10 text-[14px]">
-          <p className="text-slate-800 m-0">Don't have an account? <span className="text-[#0095f6] font-bold cursor-pointer">Sign up</span></p>
+              <button type="submit" disabled={authSubmitting} className="w-full py-5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-black text-lg tracking-wide rounded-full transition-all shadow-[0_8px_24px_rgba(16,185,129,0.3)] hover:shadow-[0_12px_32px_rgba(16,185,129,0.5)] flex items-center justify-center disabled:opacity-60 disabled:shadow-none mt-2">
+                {authSubmitting ? 'Please wait...' : (isSignup ? 'Create Account' : 'Initialize Command')}
+              </button>
+
+              <p className="text-center text-sm font-bold text-slate-500 pt-4">
+                {isSignup ? 'Already registered?' : "Don't have access?"}{' '}
+                <button type="button" onClick={() => { setIsSignup(!isSignup); setAuthError(''); }} className="text-emerald-500 hover:text-emerald-600 transition-colors bg-transparent">
+                  {isSignup ? 'Log In' : 'Create Account'}
+                </button>
+              </p>
+            </form>
+          </div>
         </div>
       </div>
     );
@@ -208,6 +268,9 @@ export default function AuthorityPage() {
           </div>
           <button onClick={handleReassign} className="bg-rose-500/20 hover:bg-rose-500/40 px-5 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all shadow-[0_0_15px_rgba(225,29,72,0.3)] border border-rose-500/50 text-rose-100">
             Trigger Reassign
+          </button>
+          <button onClick={handleLogout} className="bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded-xl text-sm font-bold text-slate-300 transition-colors border border-slate-600">
+            Log Out
           </button>
         </div>
       </div>
