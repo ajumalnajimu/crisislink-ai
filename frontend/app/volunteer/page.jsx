@@ -127,9 +127,19 @@ export default function VolunteerPage() {
             setLocationStr(`${v.lat}, ${v.lng}`);
             setMyCoords({ lat: v.lat, lng: v.lng });
             if (v.status === 'en_route') { setMatchAccepted(true); matchAcceptedRef.current = true; }
+          } else {
+            // Backend wiped or ID invalid, clear the ghost session
+            localStorage.removeItem('crisislink_volunteerId');
+            setRegistered(false);
+            setVolunteerId(null);
           }
         })
-        .catch(() => { /* Backend unreachable — clear stale session */ localStorage.removeItem('crisislink_volunteerId'); setRegistered(false); setVolunteerId(null); })
+        .catch(() => { 
+          // Network error or unreachable
+          localStorage.removeItem('crisislink_volunteerId'); 
+          setRegistered(false); 
+          setVolunteerId(null); 
+        })
         .finally(() => setActiveSession(false));
     } else {
       setActiveSession(false);
